@@ -331,6 +331,92 @@ namespace DragonEngineLibrary
         {
             return DELib_BattleTurnManager_ExecTurnAICommandDecide(fighter._ptr);
         }
+
+        // ---- Battle area control (offsets from debug PDB) ----
+        // BattleTurnManager is 0x3080 bytes. These offsets control
+        // the area culling system that hides world geometry during battle.
+        private const int OFF_AREA_CTRL = 0xA0;           // BattleAreaControl2* m_area_ctrl
+        private const int OFF_IS_RECHECK_BATTLE_AREA = 0x139; // bool m_is_recheck_battle_area
+
+        /// <summary>
+        /// Whether the battle area recheck flag is set.
+        /// When true, the engine recalculates visible area each frame.
+        /// </summary>
+        public static bool IsRecheckBattleArea
+        {
+            get
+            {
+                IntPtr ptr = Pointer();
+                if (ptr == IntPtr.Zero) return false;
+                return Marshal.ReadByte(ptr + OFF_IS_RECHECK_BATTLE_AREA) != 0;
+            }
+            set
+            {
+                IntPtr ptr = Pointer();
+                if (ptr == IntPtr.Zero) return;
+                Marshal.WriteByte(ptr + OFF_IS_RECHECK_BATTLE_AREA, value ? (byte)1 : (byte)0);
+            }
+        }
+
+        /// <summary>
+        /// Pointer to BattleAreaControl2 which manages battle zone culling.
+        /// </summary>
+        public static IntPtr AreaControlPtr
+        {
+            get
+            {
+                IntPtr ptr = Pointer();
+                if (ptr == IntPtr.Zero) return IntPtr.Zero;
+                return Marshal.ReadIntPtr(ptr + OFF_AREA_CTRL);
+            }
+            set
+            {
+                IntPtr ptr = Pointer();
+                if (ptr == IntPtr.Zero) return;
+                Marshal.WriteIntPtr(ptr + OFF_AREA_CTRL, value);
+            }
+        }
+
+        /// <summary>
+        /// Disable the battle area culling system. Nulls the area controller
+        /// and clears the recheck flag so world geometry stays visible.
+        /// WARNING: Nulling the pointer crashes if the engine dereferences it
+        /// during phase processing. Use ExpandBattleArea() instead.
+        /// </summary>
+        public static void DisableAreaCulling()
+        {
+            IntPtr ptr = Pointer();
+            if (ptr == IntPtr.Zero) return;
+
+            IntPtr oldCtrl = Marshal.ReadIntPtr(ptr + OFF_AREA_CTRL);
+            Marshal.WriteIntPtr(ptr + OFF_AREA_CTRL, IntPtr.Zero);
+            Marshal.WriteByte(ptr + OFF_IS_RECHECK_BATTLE_AREA, 0);
+        }
+
+        // m_battle_field_orbox at +0x200 (oriented bounding box)
+        // Layout: center(Vec4 16b), extents(Vec4 16b), axes(3xVec4 48b) = 80 bytes total
+        // Expanding the extents to a huge value makes the entire map "inside" the battle area.
+        private const int OFF_BATTLE_FIELD_ORBOX = 0x200;
+
+        /// <summary>
+        /// Expand the battle field bounding box to cover the entire map.
+        /// This prevents world geometry culling without nulling any pointers.
+        /// Call AFTER ChangePhase(StartWait) and AFTER ChangePhase(Start).
+        /// </summary>
+        public static void ExpandBattleArea()
+        {
+            IntPtr ptr = Pointer();
+            if (ptr == IntPtr.Zero) return;
+
+            IntPtr orbox = ptr + OFF_BATTLE_FIELD_ORBOX;
+
+            // Extents start at orbox+16 (after center Vec4)
+            // Write very large extents (10km) for X, Y, Z
+            byte[] bigExtent = BitConverter.GetBytes(10000f);
+            Marshal.Copy(bigExtent, 0, orbox + 16, 4);  // extent X
+            Marshal.Copy(bigExtent, 0, orbox + 20, 4);  // extent Y
+            Marshal.Copy(bigExtent, 0, orbox + 24, 4);  // extent Z
+        }
     }
 }
 #endif
