@@ -649,11 +649,61 @@ __declspec(dllexport) void* AddFontFromMemoryTTF(void* font_data, int font_size,
     return (void*)atlas->AddFontFromMemoryTTF(font_data, font_size, size_pixels, (ImFontConfig*)font_cfg, (const ImWchar*)glyph_ranges);
 }
 
-// igGetIO was renamed to igGetIO_Nil in cimgui for imgui 1.90+
-// alias for ImGui.NET v1.86 managed bindings
-extern "C" __declspec(dllexport) ImGuiIO* igGetIO(void)
-{
-    return &ImGui::GetIO();
+// compat shims for ImGui.NET v1.86 managed bindings (imgui 1.90+ renames/removals)
+extern "C" {
+
+// igGetIO renamed to igGetIO_Nil
+__declspec(dllexport) ImGuiIO* igGetIO(void) { return &ImGui::GetIO(); }
+
+// no-arg overload disambiguation (_Nil suffix added in 1.90+)
+__declspec(dllexport) ImGuiPlatformIO* igGetPlatformIO(void) { return &ImGui::GetPlatformIO(); }
+__declspec(dllexport) ImDrawList* igGetBackgroundDrawList_Nil(void) { return ImGui::GetBackgroundDrawList(); }
+__declspec(dllexport) ImDrawList* igGetForegroundDrawList_Nil(void) { return ImGui::GetForegroundDrawList(); }
+
+// input queries - suffix added in 1.90+ for overload disambiguation
+__declspec(dllexport) bool igIsKeyDown(ImGuiKey key) { return ImGui::IsKeyDown(key); }
+__declspec(dllexport) bool igIsKeyPressed(ImGuiKey key, bool repeat) { return ImGui::IsKeyPressed(key, repeat); }
+__declspec(dllexport) bool igIsKeyReleased(ImGuiKey key) { return ImGui::IsKeyReleased(key); }
+__declspec(dllexport) bool igIsMouseDown(ImGuiMouseButton button) { return ImGui::IsMouseDown(button); }
+__declspec(dllexport) bool igIsMouseClicked(ImGuiMouseButton button, bool repeat) { return ImGui::IsMouseClicked(button, repeat); }
+__declspec(dllexport) bool igIsMouseDoubleClicked(ImGuiMouseButton button) { return ImGui::IsMouseDoubleClicked(button); }
+__declspec(dllexport) bool igIsMouseReleased(ImGuiMouseButton button) { return ImGui::IsMouseReleased(button); }
+
+// GetKeyIndex was a no-op from 1.87+ (ImGuiKey IS the index now)
+__declspec(dllexport) ImGuiKey igGetKeyIndex(ImGuiKey key) { return key; }
+
+// Capture* renamed to SetNextFrameWant* in 1.89+
+__declspec(dllexport) void igCaptureKeyboardFromApp(bool want) { ImGui::SetNextFrameWantCaptureKeyboard(want); }
+__declspec(dllexport) void igCaptureMouseFromApp(bool want) { ImGui::SetNextFrameWantCaptureMouse(want); }
+
+// SetWindowFontScale - still in imgui but removed from cimgui wrappers
+__declspec(dllexport) void igSetWindowFontScale(float scale) { ImGui::SetWindowFontScale(scale); }
+
+// GetContentRegionMax/GetWindowContentRegion* removed in 1.92 - return safe fallbacks
+__declspec(dllexport) void igGetContentRegionMax(ImVec2* pOut) { *pOut = ImGui::GetContentRegionAvail(); }
+__declspec(dllexport) void igGetWindowContentRegionMin(ImVec2* pOut) { *pOut = ImVec2(0.0f, 0.0f); }
+__declspec(dllexport) void igGetWindowContentRegionMax(ImVec2* pOut) { *pOut = ImGui::GetWindowSize(); }
+
+// BeginChildFrame / EndChildFrame removed in 1.92 - replaced by BeginChild with FrameStyle flag
+__declspec(dllexport) bool igBeginChildFrame(unsigned int id, ImVec2 size, int flags) {
+    return ImGui::BeginChild(id, size, ImGuiChildFlags_FrameStyle, (ImGuiWindowFlags)flags);
 }
+__declspec(dllexport) void igEndChildFrame(void) { ImGui::EndChild(); }
+
+// PushAllowKeyboardFocus / PopAllowKeyboardFocus removed in 1.90+
+__declspec(dllexport) void igPushAllowKeyboardFocus(bool) {}
+__declspec(dllexport) void igPopAllowKeyboardFocus(void) {}
+
+// PushButtonRepeat / PopButtonRepeat replaced by PushItemFlag in 1.90+
+__declspec(dllexport) void igPushButtonRepeat(bool repeat) { ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, repeat); }
+__declspec(dllexport) void igPopButtonRepeat(void) { ImGui::PopItemFlag(); }
+
+// SetItemAllowOverlap renamed to SetNextItemAllowOverlap in 1.89+
+__declspec(dllexport) void igSetItemAllowOverlap(void) { ImGui::SetNextItemAllowOverlap(); }
+
+// ShowStackToolWindow - no-op (removed)
+__declspec(dllexport) void igShowStackToolWindow(bool*) {}
+
+} // extern "C"
 
 } // extern "C"
