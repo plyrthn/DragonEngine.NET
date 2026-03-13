@@ -9,11 +9,45 @@
 #include "imgui_impl_dx12.h"
 #include "imgui_impl_win32.h"
 #include "MinHook.h"
-#include "ImGuizmo.h"
-
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
+
+// ImGuizmo_BeginFrame resolved at runtime from cimguizmo.dll (avoids compiling incompatible ImGuizmo.cpp)
+typedef void (*FnImGuizmoBeginFrame)();
+static FnImGuizmoBeginFrame g_ImGuizmoBeginFrame = nullptr;
+
+static void InitImGuizmoIfPresent()
+{
+    if (g_ImGuizmoBeginFrame) return;
+    HMODULE h = GetModuleHandleA("cimguizmo.dll");
+    if (h) g_ImGuizmoBeginFrame = (FnImGuizmoBeginFrame)GetProcAddress(h, "ImGuizmo_BeginFrame");
+}
+
+// cimgui.dll context/allocator sync - so C# P/Invoke to cimgui.dll works on same context
+typedef ImGuiContext* (*FnGetCurrentContext)();
+typedef void         (*FnSetCurrentContext)(ImGuiContext*);
+typedef void         (*FnGetAllocatorFunctions)(ImGuiMemAllocFunc*, ImGuiMemFreeFunc*, void**);
+typedef void         (*FnSetAllocatorFunctions)(ImGuiMemAllocFunc, ImGuiMemFreeFunc, void*);
+
+static void SyncContextWithCimgui(ImGuiContext* ctx)
+{
+    HMODULE hCimgui = GetModuleHandleA("cimgui.dll");
+    if (!hCimgui) return;
+
+    // Sync our allocators to match cimgui.dll's before sharing
+    auto fnGetAlloc = (FnGetAllocatorFunctions)GetProcAddress(hCimgui, "igGetAllocatorFunctions");
+    auto fnSetAlloc = (FnSetAllocatorFunctions)GetProcAddress(hCimgui, "igSetAllocatorFunctions");
+    if (fnGetAlloc && fnSetAlloc) {
+        ImGuiMemAllocFunc allocFn; ImGuiMemFreeFunc freeFn; void* userData;
+        fnGetAlloc(&allocFn, &freeFn, &userData);
+        ImGui::SetAllocatorFunctions(allocFn, freeFn, userData);
+    }
+
+    // Point cimgui.dll at our context so C# igXxx calls land in the right place
+    auto fnSetCtx = (FnSetCurrentContext)GetProcAddress(hCimgui, "igSetCurrentContext");
+    if (fnSetCtx) fnSetCtx(ctx);
+}
 
 typedef HRESULT(WINAPI* PFN_Present)(IDXGISwapChain*, UINT, UINT);
 typedef HRESULT(WINAPI* PFN_ResizeBuffers)(IDXGISwapChain*, UINT, UINT, UINT, DXGI_FORMAT, UINT);
@@ -180,7 +214,8 @@ static void WINAPI HookedExecuteCommandLists(ID3D12CommandQueue* queue, UINT num
 
 // ---- Common ----
 
-extern "C" LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+// In 1.92.x the declaration is in a #if 0 block; forward-declare it here
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static LRESULT WINAPI HookedWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -218,7 +253,8 @@ static bool InitDX11(IDXGISwapChain* swapChain)
     swapChain->GetDesc(&desc);
     HookLog("[DXHook] DX11 init - HWND=%p, %ux%u\n", desc.OutputWindow, desc.BufferDesc.Width, desc.BufferDesc.Height);
 
-    ImGui::CreateContext();
+    ImGuiContext* ctx = ImGui::CreateContext();
+    SyncContextWithCimgui(ctx);
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
@@ -271,7 +307,8 @@ static bool InitDX12(IDXGISwapChain* swapChain)
     if (!CreateDX12RenderTargets(swapChain))
         return false;
 
-    ImGui::CreateContext();
+    ImGuiContext* ctx = ImGui::CreateContext();
+    SyncContextWithCimgui(ctx);
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
@@ -315,7 +352,8 @@ static HRESULT WINAPI HookedPresent(IDXGISwapChain* swapChain, UINT syncInterval
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        ImGuizmo::BeginFrame();
+        InitImGuizmoIfPresent();
+        if (g_ImGuizmoBeginFrame) g_ImGuizmoBeginFrame();
 
         for (int i = 0; i < g_PresentCallbackCount; i++) {
             if (g_PresentCallbacks[i])
@@ -351,7 +389,8 @@ static HRESULT WINAPI HookedPresent(IDXGISwapChain* swapChain, UINT syncInterval
         ImGui_ImplDX12_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        ImGuizmo::BeginFrame();
+        InitImGuizmoIfPresent();
+        if (g_ImGuizmoBeginFrame) g_ImGuizmoBeginFrame();
 
         for (int i = 0; i < g_PresentCallbackCount; i++) {
             if (g_PresentCallbacks[i])

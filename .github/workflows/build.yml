@@ -13,22 +13,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Cache cimgui
-        id: cache-cimgui
-        uses: actions/cache@v4
-        with:
-          path: deps/dx11-hook/build/x64/Release/cimgui.dll
-          key: cimgui-${{ hashFiles('deps/dx11-hook/**') }}
-
-      - name: Build cimgui.dll
-        if: steps.cache-cimgui.outputs.cache-hit != 'true'
-        run: |
-          cd deps/dx11-hook
-          mkdir build\x64
-          cd build\x64
-          cmake -DCMAKE_GENERATOR_PLATFORM=x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ..\..
-          cmake --build . --config Release
-
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
@@ -82,9 +66,10 @@ jobs:
               Compress-Archive -Path "$src/*" -DestinationPath "staging/$cfg.zip"
             }
           }
-          Copy-Item "deps/dx11-hook/build/x64/Release/cimgui.dll" -Destination "staging/cimgui.dll"
-          Compress-Archive -Path "staging/cimgui.dll" -DestinationPath "staging/cimgui.zip"
-          Remove-Item "staging/cimgui.dll"
+          $hookDlls = @("deps/dx11-hook/dehook.dll") + (Get-ChildItem "deps/hexa-native/*.dll" | ForEach-Object { $_.FullName })
+          foreach ($dll in $hookDlls) { Copy-Item $dll -Destination "staging/" -Force }
+          Compress-Archive -Path "staging/*.dll" -DestinationPath "staging/hook-dlls.zip"
+          foreach ($dll in $hookDlls) { Remove-Item "staging/$(Split-Path $dll -Leaf)" -ErrorAction SilentlyContinue }
         shell: pwsh
 
       - name: Create release
