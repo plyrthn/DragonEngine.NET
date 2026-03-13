@@ -17,10 +17,12 @@ namespace DragonEngineLibrary.Advanced
 
         public static void RegisterUIUpdate(Action func)
         {
+            DragonEngine.Log($"[ImGui] RegisterUIUpdate: {func.Method.Name}");
             DX11Present del = new DX11Present(func);
             _dx11Delegates.Add(del);
 
             DXHook.DELibrary_DXHook_RegisterPresentFunc(Marshal.GetFunctionPointerForDelegate(del));
+            DragonEngine.Log("[ImGui] RegisterUIUpdate done");
         }
 
         /// <summary>
@@ -29,10 +31,12 @@ namespace DragonEngineLibrary.Advanced
         /// </summary>
         public static void RegisterPreFirstFrame(Action func)
         {
+            DragonEngine.Log($"[ImGui] RegisterPreFirstFrame: {func.Method.Name}");
             DX11Present del = new DX11Present(func);
             _dx11Delegates.Add(del);
 
             DXHook.DELibrary_DXHook_RegisterPreFirstFrameFunc(Marshal.GetFunctionPointerForDelegate(del));
+            DragonEngine.Log("[ImGui] RegisterPreFirstFrame done");
         }
 
         internal delegate void WndProcDelegate(IntPtr hwnd, int msg, IntPtr wparam, IntPtr lparam);
@@ -53,14 +57,25 @@ namespace DragonEngineLibrary.Advanced
 
         public static void Init()
         {
+            DragonEngine.Log("[ImGui] Init() called");
             string libPath = Path.Combine(Library.Root, "Y7Internal.dll");
             string cimguiPath = Path.Combine(new FileInfo(libPath).Directory.FullName, "cimgui.dll");
 
+            DragonEngine.Log($"[ImGui] cimgui path: {cimguiPath} exists={File.Exists(cimguiPath)}");
+
             if (File.Exists(cimguiPath))
-                DragonEngine.LoadLibrary(cimguiPath);
+            {
+                DragonEngine.Log("[ImGui] Loading cimgui.dll");
+                IntPtr h = DragonEngine.LoadLibrary(cimguiPath);
+                DragonEngine.Log($"[ImGui] cimgui.dll handle: {h}");
+            }
 
 #if !IW_AND_UP
+            DragonEngine.Log("[ImGui] Calling DXHook.Init()");
             DXHook.Init();
+            DragonEngine.Log("[ImGui] DXHook.Init() returned");
+#else
+            DragonEngine.Log("[ImGui] Skipping DXHook.Init() (IW_AND_UP)");
 #endif
         }
     }

@@ -60,6 +60,25 @@ typedef void(__stdcall* WndProcCallback)(HWND, int, WPARAM, LPARAM);
 static WndProcCallback g_WndProcCallbacks[MAX_WNDPROC_CALLBACKS];
 static int g_WndProcCallbackCount = 0;
 
+static FILE* g_LogFile = nullptr;
+
+static void OpenLogFile()
+{
+    if (g_LogFile) return;
+    // resolve path relative to the exe, not cwd
+    char exePath[MAX_PATH] = {};
+    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+    char* slash = strrchr(exePath, '\\');
+    if (slash) *(slash + 1) = '\0';
+    char logPath[MAX_PATH];
+    snprintf(logPath, sizeof(logPath), "%scimgui_hook.log", exePath);
+    g_LogFile = fopen(logPath, "a");
+    if (!g_LogFile) {
+        // fallback: cwd
+        g_LogFile = fopen("cimgui_hook.log", "a");
+    }
+}
+
 static void HookLog(const char* fmt, ...)
 {
     char buf[512];
@@ -68,6 +87,12 @@ static void HookLog(const char* fmt, ...)
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
     OutputDebugStringA(buf);
+
+    OpenLogFile();
+    if (g_LogFile) {
+        fputs(buf, g_LogFile);
+        fflush(g_LogFile);
+    }
 }
 
 // ---- DX11 helpers ----
@@ -231,7 +256,7 @@ static bool InitDX11(IDXGISwapChain* swapChain)
 
     g_Backend = GFX_DX11;
     g_Initialized = true;
-    HookLog("[DXHook] DX11 init complete\n");
+    HookLog("[DXHook] DX11 init complete (device=%p ctx=%p)\n", (void*)g_Device11, (void*)g_Context11);
     return true;
 }
 
@@ -306,22 +331,36 @@ static HRESULT WINAPI HookedPresent(IDXGISwapChain* swapChain, UINT syncInterval
     }
 
     if (g_Initialized && g_Backend == GFX_DX11) {
-        if (!g_RTV11)
+        if (!g_RTV11) {
+            HookLog("[DXHook] RTV null, recreating\n");
             CreateRTV11(swapChain);
+            HookLog("[DXHook] RTV after recreate: %p\n", (void*)g_RTV11);
+        }
 
+        HookLog("[DXHook] DX11_NewFrame\n");
         ImGui_ImplDX11_NewFrame();
+        HookLog("[DXHook] Win32_NewFrame\n");
         ImGui_ImplWin32_NewFrame();
+        HookLog("[DXHook] NewFrame\n");
         ImGui::NewFrame();
+        HookLog("[DXHook] Guizmo_BeginFrame\n");
         ImGuizmo::BeginFrame();
 
         for (int i = 0; i < g_PresentCallbackCount; i++) {
-            if (g_PresentCallbacks[i])
+            if (g_PresentCallbacks[i]) {
+                HookLog("[DXHook] callback %d\n", i);
                 g_PresentCallbacks[i]();
+                HookLog("[DXHook] callback %d done\n", i);
+            }
         }
 
+        HookLog("[DXHook] Render\n");
         ImGui::Render();
+        HookLog("[DXHook] OMSetRTV rtv=%p\n", (void*)g_RTV11);
         g_Context11->OMSetRenderTargets(1, &g_RTV11, nullptr);
+        HookLog("[DXHook] RenderDrawData\n");
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        HookLog("[DXHook] frame done\n");
     }
     else if (g_Initialized && g_Backend == GFX_DX12) {
         UINT frameIdx = 0;
@@ -525,7 +564,10 @@ extern "C" {
 
 __declspec(dllexport) void InitDX11Hook()
 {
-    HookLog("[DXHook] InitDX11Hook called\n");
+    OpenLogFile();
+    char cwd[MAX_PATH] = {};
+    GetCurrentDirectoryA(MAX_PATH, cwd);
+    HookLog("[DXHook] InitDX11Hook called (cwd=%s)\n", cwd);
 
     void* presentAddr = nullptr;
     void* resizeAddr = nullptr;
@@ -605,6 +647,13 @@ __declspec(dllexport) void* AddFontFromMemoryTTF(void* font_data, int font_size,
     ImFontAtlas* atlas = ImGui::GetIO().Fonts;
     if (!atlas) return nullptr;
     return (void*)atlas->AddFontFromMemoryTTF(font_data, font_size, size_pixels, (ImFontConfig*)font_cfg, (const ImWchar*)glyph_ranges);
+}
+
+// igGetIO was renamed to igGetIO_Nil in cimgui for imgui 1.90+
+// alias for ImGui.NET v1.86 managed bindings
+extern "C" __declspec(dllexport) ImGuiIO* igGetIO(void)
+{
+    return &ImGui::GetIO();
 }
 
 } // extern "C"

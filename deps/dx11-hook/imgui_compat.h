@@ -12,3 +12,12 @@ enum ImGuiKeyModFlags_ {
     ImGuiKeyModFlags_Super = ImGuiMod_Super
 };
 #endif
+
+// CaptureMouseFromApp was renamed to SetNextFrameWantCaptureMouse in 1.89.x and removed in 1.92.x
+#if IMGUI_VERSION_NUM >= 19200
+namespace ImGui {
+    inline void CaptureMouseFromApp(bool want_capture_mouse = true) {
+        SetNextFrameWantCaptureMouse(want_capture_mouse);
+    }
+}
+#endif

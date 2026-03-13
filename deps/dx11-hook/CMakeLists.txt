@@ -79,7 +79,7 @@ target_include_directories(cimgui PRIVATE
     ${MINHOOK_DIR}/include
 )
 
-target_compile_definitions(cimgui PRIVATE IMGUI_DEFINE_MATH_OPERATORS)
+target_compile_definitions(cimgui PRIVATE IMGUI_DEFINE_MATH_OPERATORS CIMGUI_VARGS0)
 
 # Force-include compat header for addon sources that use renamed 1.87 API
 foreach(src
