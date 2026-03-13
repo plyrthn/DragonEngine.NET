@@ -64,13 +64,7 @@ Only needed if you modify `dx11_hook.cpp`. Requires CMake and MSVC.
 ```bash
 cd deps/dx11-hook
 mkdir build && cd build
-cmake -G "Visual Studio 17 2022" -A x64 ^
-  -DIMGUI_SRC_DIR=../../imgui-src ^
-  -DHEXA_DIR=../../hexa-native ^
-  -DMINHOOK_DIR=../../minhook ^
-  -DCIMGUIZMO_DIR=../../cimguizmo ^
-  -DHOOK_SRC_DIR=.. ^
-  ../CMakeLists_prebuilt.txt
+cmake -G "Visual Studio 17 2022" -A x64 ..
 cmake --build . --config Release
 ```
 

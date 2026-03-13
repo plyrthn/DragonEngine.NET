@@ -1,17 +1,26 @@
 cmake_minimum_required(VERSION 3.15)
 cmake_policy(SET CMP0091 NEW)
-project(cimgui)
+project(dehook)
 
 set(CMAKE_CXX_STANDARD 11)
 
-set(CIMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ImGui.NET-nativebuild/cimgui)
-set(IMGUI_DIR ${CIMGUI_DIR}/imgui)
-set(MINHOOK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../minhook)
-set(CIMPLOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cimplot)
-set(CIMGUIZMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cimguizmo)
-set(CIMNODES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cimnodes)
+if(NOT DEFINED IMGUI_SRC_DIR)
+    set(IMGUI_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../imgui-src)
+endif()
+if(NOT DEFINED HEXA_DIR)
+    set(HEXA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../hexa-native)
+endif()
+if(NOT DEFINED MINHOOK_DIR)
+    set(MINHOOK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../minhook)
+endif()
+if(NOT DEFINED CIMGUIZMO_DIR)
+    set(CIMGUIZMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cimguizmo)
+endif()
+if(NOT DEFINED HOOK_SRC_DIR)
+    set(HOOK_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
 
-# MinHook (C library - separate target, no force-includes)
+# MinHook (compiled from source)
 add_library(minhook STATIC
     ${MINHOOK_DIR}/src/buffer.c
     ${MINHOOK_DIR}/src/hook.c
@@ -19,61 +28,39 @@ add_library(minhook STATIC
     ${MINHOOK_DIR}/src/hde/hde32.c
     ${MINHOOK_DIR}/src/hde/hde64.c
 )
-target_include_directories(minhook PUBLIC ${MINHOOK_DIR}/include ${MINHOOK_DIR}/src)
+target_include_directories(minhook PRIVATE ${MINHOOK_DIR}/include)
+set_property(TARGET minhook PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
-# cimgui shared library (C++ only)
-add_library(cimgui SHARED
-    # imgui core
-    ${CIMGUI_DIR}/cimgui.cpp
-    ${IMGUI_DIR}/imgui.cpp
-    ${IMGUI_DIR}/imgui_draw.cpp
-    ${IMGUI_DIR}/imgui_demo.cpp
-    ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/imgui_tables.cpp
-    # backends
-    ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_dx12.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
-    # implot
-    ${CIMPLOT_DIR}/cimplot.cpp
-    ${CIMPLOT_DIR}/implot/implot.cpp
-    ${CIMPLOT_DIR}/implot/implot_items.cpp
-    ${CIMPLOT_DIR}/implot/implot_demo.cpp
-    # ImGuizmo
-    ${CIMGUIZMO_DIR}/cimguizmo.cpp
-    ${CIMGUIZMO_DIR}/ImGuizmo/ImGuizmo.cpp
-    # imnodes
-    ${CIMNODES_DIR}/cimnodes.cpp
-    ${CIMNODES_DIR}/imnodes/imnodes.cpp
-    # DX11 hook
-    ${CMAKE_CURRENT_SOURCE_DIR}/dx11_hook.cpp
+# Hook DLL: imgui core + backends + hook logic, linked against Hexa's import libs at runtime
+add_library(dehook SHARED
+    ${IMGUI_SRC_DIR}/imgui.cpp
+    ${IMGUI_SRC_DIR}/imgui_draw.cpp
+    ${IMGUI_SRC_DIR}/imgui_tables.cpp
+    ${IMGUI_SRC_DIR}/imgui_widgets.cpp
+    ${IMGUI_SRC_DIR}/imgui_impl_dx11.cpp
+    ${IMGUI_SRC_DIR}/imgui_impl_dx12.cpp
+    ${IMGUI_SRC_DIR}/imgui_impl_win32.cpp
+    ${HOOK_SRC_DIR}/dx11_hook.cpp
 )
 
-target_compile_definitions(cimgui PUBLIC
-    IMGUI_DEFINE_MATH_OPERATORS
-    IMGUI_IMPL_API=extern\ \"C\"\ __declspec\(dllexport\)
-)
-
-target_include_directories(cimgui PUBLIC
-    ${CIMGUI_DIR}
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
-    ${CIMPLOT_DIR}
-    ${CIMPLOT_DIR}/implot
-    ${CIMGUIZMO_DIR}
+target_include_directories(dehook PRIVATE
+    ${IMGUI_SRC_DIR}
     ${CIMGUIZMO_DIR}/ImGuizmo
-    ${CIMNODES_DIR}
-    ${CIMNODES_DIR}/imnodes
+    ${MINHOOK_DIR}/include
 )
 
-# compat header for addon libs targeting older imgui (ImGuiKeyModFlags etc)
-target_compile_options(cimgui PRIVATE /FI${CMAKE_CURRENT_SOURCE_DIR}/imgui_compat.h)
+target_compile_definitions(dehook PRIVATE IMGUI_DEFINE_MATH_OPERATORS)
 
-set_target_properties(cimgui PROPERTIES PREFIX "")
-target_link_libraries(cimgui minhook imm32 d3d11 d3d12 dxgi)
-
-install(TARGETS cimgui
-    RUNTIME DESTINATION .
-    LIBRARY DESTINATION .
-    ARCHIVE DESTINATION .
+target_link_libraries(dehook PRIVATE
+    ${HEXA_DIR}/cimgui_import.lib
+    ${HEXA_DIR}/cimguizmo_import.lib
+    ${HEXA_DIR}/cimnodes_import.lib
+    ${HEXA_DIR}/cimplot_import.lib
+    ${HEXA_DIR}/cimplot3d_import.lib
+    minhook
+    d3d11.lib
+    d3d12.lib
+    dxgi.lib
 )
+
+set_property(TARGET dehook PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
