@@ -40,6 +40,7 @@ add_library(dehook SHARED
     ${IMGUI_SRC_DIR}/imgui_impl_dx11.cpp
     ${IMGUI_SRC_DIR}/imgui_impl_dx12.cpp
     ${IMGUI_SRC_DIR}/imgui_impl_win32.cpp
+    ${CIMGUIZMO_DIR}/ImGuizmo/ImGuizmo.cpp
     ${HOOK_SRC_DIR}/dx11_hook.cpp
 )
 
@@ -50,6 +51,12 @@ target_include_directories(dehook PRIVATE
 )
 
 target_compile_definitions(dehook PRIVATE IMGUI_DEFINE_MATH_OPERATORS)
+
+# Force-include compat header for ImGuizmo.cpp (uses renamed 1.87 API)
+set_source_files_properties(
+    ${CIMGUIZMO_DIR}/ImGuizmo/ImGuizmo.cpp
+    PROPERTIES COMPILE_FLAGS "/FI\"${HOOK_SRC_DIR}/imgui_compat.h\""
+)
 
 target_link_libraries(dehook PRIVATE
     ${HEXA_DIR}/cimgui_import.lib
