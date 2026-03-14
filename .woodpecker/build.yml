@@ -1,8 +1,5 @@
 # "Cancel previous pipelines" must be enabled in Woodpecker repo settings
 # (Settings -> Cancel previous pipelines) to get cancel-on-new-push behavior.
-labels:
-  ci.woodpecker.concurrent: "1"
-
 when:
   - event: push
     branch: [main, "fix/*", "feature/*"]
