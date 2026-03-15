@@ -25,18 +25,18 @@ DELibrary.NET/              Main library (net48, x64)
   Structs/                  Data structures, math types
 DELibrary.NET.Loader/       Standalone loader utility
 deps/
-  cimgui/                   cimgui 1.92.4dock C wrappers + imgui 1.92.4-docking source
+  cimgui/                   cimgui 1.92.6dock C wrappers + imgui 1.92.6-docking source
     imgui/                  imgui core + backends (DX11/DX12/Win32)
   ImGuizmo/                 ImGuizmo source + cimguizmo C wrappers
-  implot/                   implot source + cimplot C wrappers
+  implot/                   implot 0.17 source + cimplot C wrappers
   imnodes/                  imnodes source + cimnodes C wrappers
   minhook/                  MinHook source
   dx11-hook/                DX11/DX12 Present hook source + CMakeLists.txt
-  hexa-native/              Hexa.NET.ImGui 1.92.4 prebuilt DLLs (cimguizmo, cimnodes, cimplot, cimplot3d)
+  hexa-native/              Hexa.NET prebuilt DLLs (cimguizmo, cimnodes, cimplot, cimplot3d)
   prebuilt-libs/            Prebuilt cimgui.dll (monolithic)
 ```
 
-All third-party source is vendored directly — no submodules.
+All third-party source is vendored directly -- no submodules.
 
 ## Building
 
@@ -49,14 +49,16 @@ msbuild DragonEngine.sln /p:Configuration="YLAD Release" /p:Platform=x64
 
 ### Native DLL
 
-The prebuilt `cimgui.dll` is committed to `deps/prebuilt-libs/` — no build step required for normal use.
+The prebuilt `cimgui.dll` is committed to `deps/prebuilt-libs/` -- no build step required for normal use.
 
 `cimgui.dll` is a monolithic DLL containing:
-- imgui 1.92.4-docking core + DX11/DX12/Win32 backends
-- cimgui C wrappers (with `CIMGUI_VARGS0` — required for Hexa.NET P/Invoke)
+- imgui 1.92.6-docking core + DX11/DX12/Win32 backends
+- cimgui C wrappers (with `CIMGUI_VARGS0`)
 - ImGuizmo, implot, imnodes
 - MinHook
 - DX11/DX12 Present hook
+
+Compatible with [Hexa.NET.ImGui](https://github.com/HexaEngine/Hexa.NET.ImGui) managed bindings (and Hexa.NET.ImGuizmo, Hexa.NET.ImPlot, Hexa.NET.ImNodes). All addon symbols are exported from the single DLL.
 
 This single DLL is the only native dependency. Deploy it alongside `DELibrary.NET.exe`.
 
@@ -71,9 +73,11 @@ cmake -G "Visual Studio 17 2022" -A x64 ..
 cmake --build . --config Release
 ```
 
-Output: `build/x64/Release/cimgui.dll`
+Output: `build/Release/cimgui.dll`
 
 ### cimgui.dll exports
+
+Hook-specific exports (not part of upstream cimgui):
 
 | Export | Description |
 |--------|-------------|
@@ -84,6 +88,7 @@ Output: `build/x64/Release/cimgui.dll`
 | `GetGameHwnd` | Returns the game window handle |
 | `GetFontAtlas` | Returns the ImGui font atlas pointer |
 | `AddFontFromMemoryTTF` | Add a font from memory to the atlas |
+| `igSetWindowFontScale` | SetWindowFontScale (not emitted by cimgui's generator) |
 
 ## ImGui / ImGuizmo Usage
 

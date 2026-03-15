@@ -1,4 +1,6 @@
 #include <d3d11.h>
+#include <d3d11_4.h>
+#include <d3d11sdklayers.h>
 #include <d3d12.h>
 #include <dxgi.h>
 #include <dxgi1_4.h>
@@ -17,16 +19,41 @@
 typedef HRESULT(WINAPI* PFN_Present)(IDXGISwapChain*, UINT, UINT);
 typedef HRESULT(WINAPI* PFN_ResizeBuffers)(IDXGISwapChain*, UINT, UINT, UINT, DXGI_FORMAT, UINT);
 typedef void(WINAPI* PFN_ExecuteCommandLists)(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*);
+
+// Private heap for imgui allocations.
+// With /MT static CRT, malloc/free use GetProcessHeap() which is shared with the game.
+// Any heap corruption in imgui would corrupt the game's heap. Using a private heap
+// isolates imgui's allocations so corruption stays contained.
+static HANDLE g_ImGuiHeap = nullptr;
+
+static void* ImGuiPrivateAlloc(size_t sz, void*)
+{
+    return HeapAlloc(g_ImGuiHeap, 0, sz);
+}
+
+static void ImGuiPrivateFree(void* ptr, void*)
+{
+    if (ptr)
+        HeapFree(g_ImGuiHeap, 0, ptr);
+}
 typedef void(__stdcall* ManagedCallback)();
 
 static PFN_Present g_OriginalPresent = nullptr;
 static PFN_ResizeBuffers g_OriginalResizeBuffers = nullptr;
 static PFN_ExecuteCommandLists g_OriginalExecuteCommandLists = nullptr;
+static void* g_ExeCmdListsTarget = nullptr; // original vtable addr for MH_EnableHook
 
 // DX11 state
 static ID3D11Device* g_Device11 = nullptr;
 static ID3D11DeviceContext* g_Context11 = nullptr;
 static ID3D11RenderTargetView* g_RTV11 = nullptr;
+#ifdef _DEBUG
+static ID3D11InfoQueue* g_InfoQueue11 = nullptr;
+#endif
+
+// debug / crash tracing
+static int g_FrameCount = 0;
+static const char* g_LastStep = "none";
 
 // DX12 state
 static ID3D12Device* g_Device12 = nullptr;
@@ -43,6 +70,7 @@ enum GfxBackend { GFX_NONE, GFX_DX11, GFX_DX12 };
 static GfxBackend g_Backend = GFX_NONE;
 
 static bool g_Initialized = false;
+static bool g_SkipRendering = false;
 static bool g_InitFailed = false;
 static HWND g_GameHwnd = nullptr;
 static WNDPROC g_OriginalWndProc = nullptr;
@@ -188,6 +216,8 @@ static bool CreateDX12RenderTargets(IDXGISwapChain* swapChain)
     return true;
 }
 
+static const char* MHStatusToString(MH_STATUS status);
+
 // ---- ExecuteCommandLists hook (captures the game's command queue) ----
 
 static void WINAPI HookedExecuteCommandLists(ID3D12CommandQueue* queue, UINT numCmdLists, ID3D12CommandList* const* cmdLists)
@@ -208,7 +238,7 @@ extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam
 
 static LRESULT WINAPI HookedWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (g_Initialized) {
+    if (g_Initialized && ImGui::GetCurrentContext()) {
         if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
             return 1;
 
@@ -238,25 +268,62 @@ static bool InitDX11(IDXGISwapChain* swapChain)
 
     g_Device11->GetImmediateContext(&g_Context11);
 
+    // Enable D3D11 multithread protection so the runtime serializes
+    // immediate context access. Without this, our Present hook and the
+    // game's worker threads (or CLR finalizer) can race on the context.
+    ID3D11Multithread* mt = nullptr;
+    if (SUCCEEDED(g_Device11->QueryInterface(__uuidof(ID3D11Multithread), (void**)&mt))) {
+        mt->SetMultithreadProtected(TRUE);
+        mt->Release();
+        HookLog("[DXHook] D3D11 multithread protection enabled\n");
+    } else {
+        HookLog("[DXHook] D3D11 multithread protection not available\n");
+    }
+
     DXGI_SWAP_CHAIN_DESC desc;
     swapChain->GetDesc(&desc);
     HookLog("[DXHook] DX11 init - HWND=%p, %ux%u\n", desc.OutputWindow, desc.BufferDesc.Width, desc.BufferDesc.Height);
+
+    g_GameHwnd = desc.OutputWindow;
+
+    if (!g_ImGuiHeap) {
+        g_ImGuiHeap = HeapCreate(0, 0, 0);
+        HookLog("[DXHook] Private heap created: %p\n", g_ImGuiHeap);
+    }
+    ImGui::SetAllocatorFunctions(ImGuiPrivateAlloc, ImGuiPrivateFree);
 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    ImGui_ImplWin32_Init(desc.OutputWindow);
+    ImGui_ImplWin32_Init(g_GameHwnd);
     ImGui_ImplDX11_Init(g_Device11, g_Context11);
 
-    g_GameHwnd = desc.OutputWindow;
     g_OriginalWndProc = (WNDPROC)SetWindowLongPtrW(g_GameHwnd, GWLP_WNDPROC, (LONG_PTR)HookedWndProc);
 
     FirePreFirstFrameCallbacks();
 
+    CreateRTV11(swapChain);
+
     g_Backend = GFX_DX11;
     g_Initialized = true;
-    HookLog("[DXHook] DX11 init complete (device=%p ctx=%p)\n", (void*)g_Device11, (void*)g_Context11);
+    HookLog("[DXHook] DX11 init complete (device=%p ctx=%p rtv=%p)\n",
+        (void*)g_Device11, (void*)g_Context11, (void*)g_RTV11);
+
+#ifdef _DEBUG
+    if (SUCCEEDED(g_Device11->QueryInterface(__uuidof(ID3D11InfoQueue), (void**)&g_InfoQueue11)))
+    {
+        g_InfoQueue11->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+        g_InfoQueue11->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, TRUE);
+        g_InfoQueue11->PushEmptyStorageFilter();
+        HookLog("[DXHook] D3D11 InfoQueue attached\n");
+    }
+    else
+    {
+        HookLog("[DXHook] D3D11 InfoQueue not available (device not in debug mode)\n");
+    }
+#endif
+
     return true;
 }
 
@@ -267,6 +334,12 @@ static bool InitDX12(IDXGISwapChain* swapChain)
         return false;
 
     HookLog("[DXHook] DX12 device found\n");
+
+    // Enable the ExecuteCommandLists hook now that we confirmed DX12
+    if (g_ExeCmdListsTarget) {
+        MH_STATUS st = MH_EnableHook(g_ExeCmdListsTarget);
+        HookLog("[DXHook] MH_EnableHook(ExecuteCommandLists): %s\n", MHStatusToString(st));
+    }
 
     // Wait for command queue capture from ExecuteCommandLists hook
     if (!g_CmdQueue12) {
@@ -295,6 +368,12 @@ static bool InitDX12(IDXGISwapChain* swapChain)
     if (!CreateDX12RenderTargets(swapChain))
         return false;
 
+    if (!g_ImGuiHeap) {
+        g_ImGuiHeap = HeapCreate(0, 0, 0);
+        HookLog("[DXHook] Private heap created: %p\n", g_ImGuiHeap);
+    }
+    ImGui::SetAllocatorFunctions(ImGuiPrivateAlloc, ImGuiPrivateFree);
+
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -319,48 +398,45 @@ static bool InitDX12(IDXGISwapChain* swapChain)
 static HRESULT WINAPI HookedPresent(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags)
 {
     if (!g_Initialized && !g_InitFailed) {
-        // Try DX12 first (returns false if waiting for command queue), then DX11
-        if (!InitDX12(swapChain) && !g_CmdQueue12) {
-            // No DX12 device at all, try DX11
+        bool dx12DeviceFound = InitDX12(swapChain);
+        if (!dx12DeviceFound && !g_Device12) {
             if (!InitDX11(swapChain)) {
                 HookLog("[DXHook] Both DX11 and DX12 init failed\n");
                 g_InitFailed = true;
             }
         }
-        // If DX12 device was found but waiting for queue, just pass through
     }
 
-    if (g_Initialized && g_Backend == GFX_DX11) {
-        if (!g_RTV11) {
-            HookLog("[DXHook] RTV null, recreating\n");
+    if (g_Initialized && g_Backend == GFX_DX11 && !g_SkipRendering) {
+        if (!g_RTV11)
             CreateRTV11(swapChain);
-            HookLog("[DXHook] RTV after recreate: %p\n", (void*)g_RTV11);
-        }
 
-        HookLog("[DXHook] DX11_NewFrame\n");
-        ImGui_ImplDX11_NewFrame();
-        HookLog("[DXHook] Win32_NewFrame\n");
-        ImGui_ImplWin32_NewFrame();
-        HookLog("[DXHook] NewFrame\n");
-        ImGui::NewFrame();
-        HookLog("[DXHook] Guizmo_BeginFrame\n");
-        ImGuizmo::BeginFrame();
+        if (g_RTV11) {
+            ImGui_ImplDX11_NewFrame();
+            ImGui_ImplWin32_NewFrame();
+            ImGui::NewFrame();
+            ImGuizmo::BeginFrame();
 
-        for (int i = 0; i < g_PresentCallbackCount; i++) {
-            if (g_PresentCallbacks[i]) {
-                HookLog("[DXHook] callback %d\n", i);
-                g_PresentCallbacks[i]();
-                HookLog("[DXHook] callback %d done\n", i);
+            for (int i = 0; i < g_PresentCallbackCount; i++) {
+                if (g_PresentCallbacks[i])
+                    g_PresentCallbacks[i]();
             }
-        }
 
-        HookLog("[DXHook] Render\n");
-        ImGui::Render();
-        HookLog("[DXHook] OMSetRTV rtv=%p\n", (void*)g_RTV11);
-        g_Context11->OMSetRenderTargets(1, &g_RTV11, nullptr);
-        HookLog("[DXHook] RenderDrawData\n");
-        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-        HookLog("[DXHook] frame done\n");
+            ImGui::Render();
+
+            // Save current render targets before we override them
+            ID3D11RenderTargetView* oldRTV = nullptr;
+            ID3D11DepthStencilView* oldDSV = nullptr;
+            g_Context11->OMGetRenderTargets(1, &oldRTV, &oldDSV);
+
+            g_Context11->OMSetRenderTargets(1, &g_RTV11, nullptr);
+            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+            // Restore original render targets
+            g_Context11->OMSetRenderTargets(1, &oldRTV, oldDSV);
+            if (oldRTV) oldRTV->Release();
+            if (oldDSV) oldDSV->Release();
+        }
     }
     else if (g_Initialized && g_Backend == GFX_DX12) {
         UINT frameIdx = 0;
@@ -413,10 +489,11 @@ static HRESULT WINAPI HookedResizeBuffers(IDXGISwapChain* swapChain, UINT buffer
 {
     HookLog("[DXHook] ResizeBuffers %ux%u\n", width, height);
 
-    if (g_Backend == GFX_DX11) {
+    if (g_Backend == GFX_DX11 && ImGui::GetCurrentContext()) {
+        ImGui_ImplDX11_InvalidateDeviceObjects();
         CleanupRTV11();
     }
-    else if (g_Backend == GFX_DX12) {
+    else if (g_Backend == GFX_DX12 && ImGui::GetCurrentContext()) {
         ImGui_ImplDX12_InvalidateDeviceObjects();
         CleanupDX12Buffers();
         if (g_CmdList12) { g_CmdList12->Release(); g_CmdList12 = nullptr; }
@@ -430,7 +507,7 @@ static HRESULT WINAPI HookedResizeBuffers(IDXGISwapChain* swapChain, UINT buffer
 
     HRESULT hr = g_OriginalResizeBuffers(swapChain, bufferCount, width, height, format, swapChainFlags);
 
-    if (g_Backend == GFX_DX12 && SUCCEEDED(hr)) {
+    if (g_Backend == GFX_DX12 && SUCCEEDED(hr) && ImGui::GetCurrentContext()) {
         CreateDX12RenderTargets(swapChain);
         ImGui_ImplDX12_CreateDeviceObjects();
     }
@@ -594,17 +671,27 @@ __declspec(dllexport) void InitDX11Hook()
     HookLog("[DXHook] MH_CreateHook(ResizeBuffers): %s\n", MHStatusToString(status));
     if (status != MH_OK) return;
 
-    // Hook ExecuteCommandLists for DX12 command queue capture
+    // Hook ExecuteCommandLists for DX12 command queue capture.
+    // Only needed for actual DX12 games (LJ etc). On DX11 games (YLAD),
+    // Windows' internal DX11-on-12 translation layer uses DX12 internally
+    // and hooking ExecuteCommandLists there causes vertex corruption.
+    // We defer this hook — it's created but not enabled until we confirm
+    // the game is actually using DX12 (in InitDX12).
     void* exeCmdAddr = nullptr;
     if (GetExecuteCommandListsAddr(&exeCmdAddr)) {
+        g_ExeCmdListsTarget = exeCmdAddr;
         status = MH_CreateHook(exeCmdAddr, (void*)HookedExecuteCommandLists, (void**)&g_OriginalExecuteCommandLists);
         HookLog("[DXHook] MH_CreateHook(ExecuteCommandLists): %s\n", MHStatusToString(status));
-        // non-fatal if this fails, DX11 games don't need it
     } else {
         HookLog("[DXHook] DX12 not available, skipping ExecuteCommandLists hook\n");
     }
 
-    status = MH_EnableHook(MH_ALL_HOOKS);
+    // Only enable Present and ResizeBuffers now.
+    // ExecuteCommandLists will be enabled later if DX12 is confirmed.
+    status = MH_EnableHook(presentAddr);
+    HookLog("[DXHook] MH_EnableHook(Present): %s\n", MHStatusToString(status));
+    status = MH_EnableHook(resizeAddr);
+    HookLog("[DXHook] MH_EnableHook(ResizeBuffers): %s\n", MHStatusToString(status));
     HookLog("[DXHook] MH_EnableHook(ALL): %s\n", MHStatusToString(status));
 
     HookLog("[DXHook] Hooks installed\n");
@@ -654,61 +741,10 @@ __declspec(dllexport) void* AddFontFromMemoryTTF(void* font_data, int font_size,
     return (void*)atlas->AddFontFromMemoryTTF(font_data, font_size, size_pixels, &cfg, (const ImWchar*)glyph_ranges);
 }
 
-// compat shims for ImGui.NET v1.86 managed bindings (imgui 1.90+ renames/removals)
-extern "C" {
-
-// igGetIO renamed to igGetIO_Nil
-__declspec(dllexport) ImGuiIO* igGetIO(void) { return &ImGui::GetIO(); }
-
-// no-arg overload disambiguation (_Nil suffix added in 1.90+)
-__declspec(dllexport) ImGuiPlatformIO* igGetPlatformIO(void) { return &ImGui::GetPlatformIO(); }
-__declspec(dllexport) ImDrawList* igGetBackgroundDrawList_Nil(void) { return ImGui::GetBackgroundDrawList(); }
-__declspec(dllexport) ImDrawList* igGetForegroundDrawList_Nil(void) { return ImGui::GetForegroundDrawList(); }
-
-// input queries - suffix added in 1.90+ for overload disambiguation
-__declspec(dllexport) bool igIsKeyDown(ImGuiKey key) { return ImGui::IsKeyDown(key); }
-__declspec(dllexport) bool igIsKeyPressed(ImGuiKey key, bool repeat) { return ImGui::IsKeyPressed(key, repeat); }
-__declspec(dllexport) bool igIsKeyReleased(ImGuiKey key) { return ImGui::IsKeyReleased(key); }
-__declspec(dllexport) bool igIsMouseDown(ImGuiMouseButton button) { return ImGui::IsMouseDown(button); }
-__declspec(dllexport) bool igIsMouseClicked(ImGuiMouseButton button, bool repeat) { return ImGui::IsMouseClicked(button, repeat); }
-__declspec(dllexport) bool igIsMouseDoubleClicked(ImGuiMouseButton button) { return ImGui::IsMouseDoubleClicked(button); }
-__declspec(dllexport) bool igIsMouseReleased(ImGuiMouseButton button) { return ImGui::IsMouseReleased(button); }
-
-// GetKeyIndex was a no-op from 1.87+ (ImGuiKey IS the index now)
-__declspec(dllexport) ImGuiKey igGetKeyIndex(ImGuiKey key) { return key; }
-
-// Capture* renamed to SetNextFrameWant* in 1.89+
-__declspec(dllexport) void igCaptureKeyboardFromApp(bool want) { ImGui::SetNextFrameWantCaptureKeyboard(want); }
-__declspec(dllexport) void igCaptureMouseFromApp(bool want) { ImGui::SetNextFrameWantCaptureMouse(want); }
-
-// SetWindowFontScale - still in imgui but removed from cimgui wrappers
-__declspec(dllexport) void igSetWindowFontScale(float scale) { ImGui::SetWindowFontScale(scale); }
-
-// GetContentRegionMax/GetWindowContentRegion* removed in 1.92 - return safe fallbacks
-__declspec(dllexport) void igGetContentRegionMax(ImVec2* pOut) { *pOut = ImGui::GetContentRegionAvail(); }
-__declspec(dllexport) void igGetWindowContentRegionMin(ImVec2* pOut) { *pOut = ImVec2(0.0f, 0.0f); }
-__declspec(dllexport) void igGetWindowContentRegionMax(ImVec2* pOut) { *pOut = ImGui::GetWindowSize(); }
-
-// BeginChildFrame / EndChildFrame removed in 1.92 - replaced by BeginChild with FrameStyle flag
-__declspec(dllexport) bool igBeginChildFrame(unsigned int id, ImVec2 size, int flags) {
-    return ImGui::BeginChild(id, size, ImGuiChildFlags_FrameStyle, (ImGuiWindowFlags)flags);
+// SetWindowFontScale exists in imgui C++ but cimgui's generator doesn't emit a C wrapper.
+// Export it so managed code can call it.
+__declspec(dllexport) void igSetWindowFontScale(float scale) {
+    if (ImGui::GetCurrentContext()) ImGui::SetWindowFontScale(scale);
 }
-__declspec(dllexport) void igEndChildFrame(void) { ImGui::EndChild(); }
-
-// PushAllowKeyboardFocus / PopAllowKeyboardFocus removed in 1.90+
-__declspec(dllexport) void igPushAllowKeyboardFocus(bool) {}
-__declspec(dllexport) void igPopAllowKeyboardFocus(void) {}
-
-// PushButtonRepeat / PopButtonRepeat replaced by PushItemFlag in 1.90+
-__declspec(dllexport) void igPushButtonRepeat(bool repeat) { ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, repeat); }
-__declspec(dllexport) void igPopButtonRepeat(void) { ImGui::PopItemFlag(); }
-
-// SetItemAllowOverlap renamed to SetNextItemAllowOverlap in 1.89+
-__declspec(dllexport) void igSetItemAllowOverlap(void) { ImGui::SetNextItemAllowOverlap(); }
-
-// ShowStackToolWindow - no-op (removed)
-__declspec(dllexport) void igShowStackToolWindow(bool*) {}
-
-} // extern "C"
 
 } // extern "C"

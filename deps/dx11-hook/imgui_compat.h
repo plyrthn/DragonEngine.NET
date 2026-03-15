@@ -14,19 +14,7 @@ enum ImGuiKeyModFlags_ {
 };
 #endif
 
-// _c typedefs removed from cimgui in 1.92.x - addon wrappers still use them
-#ifndef ImVec2_c
-typedef ImVec2 ImVec2_c;
-#endif
-#ifndef ImVec4_c
-typedef ImVec4 ImVec4_c;
-#endif
-#ifndef ImRect_c
-typedef ImRect ImRect_c;
-#endif
-#ifndef ImTextureRef_c
-typedef ImTextureRef ImTextureRef_c;
-#endif
+// _c struct typedefs provided by cimgui.h (1.92.6+)
 
 // CaptureMouseFromApp was renamed to SetNextFrameWantCaptureMouse in 1.89.x and removed in 1.92.x
 #if IMGUI_VERSION_NUM >= 19200
