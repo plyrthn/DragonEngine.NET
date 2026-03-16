@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "quarterly"
+      interval: "daily"
     target-branch: "main"
     labels:
       - "type:chore"

@@ -39,7 +39,3 @@ xcuserdata
 ## JetBrains IDE artifacts
 .idea
 cmake-build-*
-
-## LLM instruction files
-CLAUDE.md
-GEMINI.md

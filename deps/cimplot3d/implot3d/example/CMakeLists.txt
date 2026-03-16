@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(ImPlot3DExample LANGUAGES CXX C)
 
 # Set the C++ standard
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 
@@ -24,8 +24,9 @@ FetchContent_MakeAvailable(glfw)
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY "https://github.com/ocornut/imgui"
-    GIT_TAG "v1.92.4"
+    GIT_TAG "v1.91.9b"
     GIT_PROGRESS TRUE
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(imgui)
 set(IMGUI_SOURCE
@@ -45,7 +46,7 @@ target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
 FetchContent_Declare(
     implot
     GIT_REPOSITORY "https://github.com/epezent/implot"
-    GIT_TAG "v0.17"
+    GIT_TAG "3da8bd34299965d3b0ab124df743fe3e076fa222"
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(implot)
