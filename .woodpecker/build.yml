@@ -33,6 +33,7 @@ steps:
           [ -d "$src" ] && zip -j "release/$cfg.zip" "$src"/* || true
         done
       - zip -j release/hook-dlls.zip deps/prebuilt-libs/cimgui.dll
+      - zip -j release/amsi-workaround.zip deps/amsi-workaround/DELibInitializer.asi
 
   - name: changelog
     image: alpine/git
