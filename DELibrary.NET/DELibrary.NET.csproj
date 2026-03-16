@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <OutputType>WinExe</OutputType>
+    <TargetExt>.dll</TargetExt>
     <RootNamespace>DragonEngineLibrary</RootNamespace>
     <AssemblyName>DELibrary.NET</AssemblyName>
     <LangVersion>7.3</LangVersion>
