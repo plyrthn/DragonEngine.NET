@@ -20,6 +20,9 @@ namespace DragonEngineLibrary.Advanced
             DragonEngine.Log($"[ImGui] RegisterUIUpdate: {func.Method.Name}");
             DX11Present del = new DX11Present(func);
             _dx11Delegates.Add(del);
+            // JIT-compile the target on this thread so type initializers don't run
+            // on the DX11 render thread when the native callback fires.
+            try { System.Runtime.CompilerServices.RuntimeHelpers.PrepareDelegate(del); } catch { }
 
             DXHook.DELibrary_DXHook_RegisterPresentFunc(Marshal.GetFunctionPointerForDelegate(del));
             DragonEngine.Log("[ImGui] RegisterUIUpdate done");
@@ -34,6 +37,8 @@ namespace DragonEngineLibrary.Advanced
             DragonEngine.Log($"[ImGui] RegisterPreFirstFrame: {func.Method.Name}");
             DX11Present del = new DX11Present(func);
             _dx11Delegates.Add(del);
+            // Same JIT pre-warm for pre-first-frame callbacks.
+            try { System.Runtime.CompilerServices.RuntimeHelpers.PrepareDelegate(del); } catch { }
 
             DXHook.DELibrary_DXHook_RegisterPreFirstFrameFunc(Marshal.GetFunctionPointerForDelegate(del));
             DragonEngine.Log("[ImGui] RegisterPreFirstFrame done");
@@ -88,8 +93,6 @@ namespace DragonEngineLibrary.Advanced
             Check(hCimgui, "ImGuizmo", "ImGuizmo_BeginFrame");
             Check(hCimgui, "implot",   "ImPlot_BeginPlot");
             Check(hCimgui, "imnodes",  "imnodes_BeginNodeEditor");
-            // legacy compat alias
-            Check(hCimgui, "igGetIO compat", "igGetIO");
         }
 
         private static void Check(IntPtr hModule, string label, string symbol)

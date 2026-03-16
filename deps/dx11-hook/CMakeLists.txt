@@ -22,6 +22,9 @@ endif()
 if(NOT DEFINED CIMNODES_DIR)
     set(CIMNODES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../imnodes)
 endif()
+if(NOT DEFINED CIMPLOT3D_DIR)
+    set(CIMPLOT3D_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cimplot3d)
+endif()
 if(NOT DEFINED HOOK_SRC_DIR)
     set(HOOK_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
@@ -62,6 +65,12 @@ add_library(cimgui SHARED
     # imnodes
     ${CIMNODES_DIR}/imnodes.cpp
     ${CIMNODES_DIR}/cimnodes.cpp
+    # implot3d
+    ${CIMPLOT3D_DIR}/implot3d/implot3d.cpp
+    ${CIMPLOT3D_DIR}/implot3d/implot3d_items.cpp
+    ${CIMPLOT3D_DIR}/implot3d/implot3d_meshes.cpp
+    ${CIMPLOT3D_DIR}/implot3d/implot3d_demo.cpp
+    ${CIMPLOT3D_DIR}/cimplot3d.cpp
     # DX hook
     ${HOOK_SRC_DIR}/dx11_hook.cpp
 )
@@ -73,6 +82,8 @@ target_include_directories(cimgui PRIVATE
     ${CIMGUIZMO_DIR}
     ${CIMPLOT_DIR}
     ${CIMNODES_DIR}
+    ${CIMPLOT3D_DIR}
+    ${CIMPLOT3D_DIR}/implot3d
     ${MINHOOK_DIR}/include
 )
 
@@ -87,6 +98,11 @@ foreach(src
     ${CIMPLOT_DIR}/cimplot.cpp
     ${CIMNODES_DIR}/imnodes.cpp
     ${CIMNODES_DIR}/cimnodes.cpp
+    ${CIMPLOT3D_DIR}/implot3d/implot3d.cpp
+    ${CIMPLOT3D_DIR}/implot3d/implot3d_items.cpp
+    ${CIMPLOT3D_DIR}/implot3d/implot3d_meshes.cpp
+    ${CIMPLOT3D_DIR}/implot3d/implot3d_demo.cpp
+    ${CIMPLOT3D_DIR}/cimplot3d.cpp
 )
     set_source_files_properties(${src} PROPERTIES
         COMPILE_FLAGS "/FI\"${HOOK_SRC_DIR}/imgui_compat.h\""
