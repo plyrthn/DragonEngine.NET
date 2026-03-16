@@ -99,19 +99,3 @@ steps:
         event: push
       - event: tag
         ref: "refs/tags/v*"
-
-  - name: scrub-status
-    image: alpine
-    environment:
-      GHCR_TOKEN:
-        from_secret: ghcr_token
-    commands:
-      - apk add --no-cache curl
-      - |
-        for ctx in "ci/woodpecker/push/build" "ci/woodpecker/push/package" "ci/woodpecker/push/changelog" "ci/woodpecker/push/release" "ci/woodpecker/push/scrub-status"; do
-          curl -sS -X POST \
-            -H "Authorization: token $GHCR_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -d "{\"state\":\"success\",\"context\":\"$ctx\",\"description\":\"Build succeeded\"}" \
-            "https://api.github.com/repos/$CI_REPO/statuses/$CI_COMMIT_SHA" > /dev/null
-        done

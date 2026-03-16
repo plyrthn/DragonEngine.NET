@@ -1,0 +1,22 @@
+name: Scrub CI status URLs
+on:
+  status: {}
+
+jobs:
+  scrub:
+    if: >-
+      github.event.state == 'success' &&
+      startsWith(github.event.context, 'ci/woodpecker/') &&
+      github.event.target_url != null &&
+      github.event.target_url != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Overwrite status without target_url
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -d '{"state":"success","context":"${{ github.event.context }}","description":"Build succeeded"}' \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.event.sha }}"
