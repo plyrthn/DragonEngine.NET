@@ -53,6 +53,7 @@ static GfxBackend g_Backend = GFX_NONE;
 
 static bool g_Initialized = false;
 static bool g_InitFailed = false;
+static bool g_DX12Detected = false; // true once we see a DX12 device on the swapchain
 static HWND g_GameHwnd = nullptr;
 static WNDPROC g_OriginalWndProc = nullptr;
 static int s_DX11Frame = 0;
@@ -295,6 +296,8 @@ static bool InitDX12(IDXGISwapChain* swapChain)
 
     HookLog("[DXHook] DX12 device found\n");
 
+    g_DX12Detected = true;
+
     // Wait for command queue capture from ExecuteCommandLists hook
     if (!g_CmdQueue12) {
         HookLog("[DXHook] DX12 waiting for command queue capture...\n");
@@ -347,14 +350,16 @@ static HRESULT WINAPI HookedPresent(IDXGISwapChain* swapChain, UINT syncInterval
 {
     if (!g_Initialized && !g_InitFailed) {
         // Try DX12 first (returns false if waiting for command queue), then DX11
-        if (!InitDX12(swapChain) && !g_CmdQueue12) {
-            // No DX12 device at all, try DX11
-            if (!InitDX11(swapChain)) {
-                HookLog("[DXHook] Both DX11 and DX12 init failed\n");
-                g_InitFailed = true;
+        if (!InitDX12(swapChain)) {
+            if (!g_DX12Detected) {
+                // No DX12 device at all, try DX11
+                if (!InitDX11(swapChain)) {
+                    HookLog("[DXHook] Both DX11 and DX12 init failed\n");
+                    g_InitFailed = true;
+                }
             }
+            // DX12 detected but waiting for command queue - keep retrying
         }
-        // If DX12 device was found but waiting for queue, just pass through
     }
 
     if (g_Initialized && g_Backend == GFX_DX11) {
