@@ -92,7 +92,7 @@ namespace DragonEngineLibrary.Advanced
             Check(hCimgui, "hook",     "InitDX11Hook");
             Check(hCimgui, "ImGuizmo", "ImGuizmo_BeginFrame");
             Check(hCimgui, "implot",   "ImPlot_BeginPlot");
-            Check(hCimgui, "imnodes",  "imnodes_BeginNodeEditor");
+            Check(hCimgui, "imnodes",  "ImNodes_BeginNodeEditor");
         }
 
         private static void Check(IntPtr hModule, string label, string symbol)
