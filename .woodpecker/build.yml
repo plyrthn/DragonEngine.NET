@@ -12,9 +12,13 @@ steps:
     image: mcr.microsoft.com/dotnet/sdk:8.0
     commands:
       - dotnet restore DragonEngine.sln
+      - dotnet build DragonEngine.sln -c "YLAD Debug" -p:Platform=x64 --no-restore
       - dotnet build DragonEngine.sln -c "YLAD Release" -p:Platform=x64 --no-restore
+      - dotnet build DragonEngine.sln -c "Gaiden Debug" -p:Platform=x64 --no-restore
       - dotnet build DragonEngine.sln -c "Gaiden Release" -p:Platform=x64 --no-restore
+      - dotnet build DragonEngine.sln -c "Infinite Wealth Debug" -p:Platform=x64 --no-restore
       - dotnet build DragonEngine.sln -c "Infinite Wealth Release" -p:Platform=x64 --no-restore
+      - dotnet build DragonEngine.sln -c "Lost Judgment Debug" -p:Platform=x64 --no-restore
       - dotnet build DragonEngine.sln -c "Lost Judgment Release" -p:Platform=x64 --no-restore
       - dotnet build DragonEngine.sln -c "Release" -p:Platform=x64 --no-restore
 
@@ -24,7 +28,7 @@ steps:
       - apk add --no-cache zip
       - mkdir -p release
       - |
-        for cfg in "YLAD Release" "Gaiden Release" "Infinite Wealth Release" "Lost Judgment Release" "Release"; do
+        for cfg in "YLAD Debug" "YLAD Release" "Gaiden Debug" "Gaiden Release" "Infinite Wealth Debug" "Infinite Wealth Release" "Lost Judgment Debug" "Lost Judgment Release" "Release"; do
           src="DELibrary.NET/bin/x64/$cfg"
           [ -d "$src" ] && zip -j "release/$cfg.zip" "$src"/* || true
         done
