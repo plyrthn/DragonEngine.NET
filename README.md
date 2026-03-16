@@ -25,15 +25,16 @@ DELibrary.NET/              Main library (net48, x64)
   Structs/                  Data structures, math types
 DELibrary.NET.Loader/       Standalone loader utility
 deps/
-  cimgui/                   cimgui 1.92.6dock C wrappers + imgui 1.92.6-docking source
+  cimgui/                   cimgui 1.92.4dock C wrappers + imgui 1.92.4-docking source
     imgui/                  imgui core + backends (DX11/DX12/Win32)
   ImGuizmo/                 ImGuizmo source + cimguizmo C wrappers
   implot/                   implot 0.17 source + cimplot C wrappers
-  imnodes/                  imnodes source + cimnodes C wrappers
+  imnodes/                  imnodes source + cimnodes C wrappers (PascalCase exports)
+  cimplot3d/                implot3d 0.3 source + cimplot3d C wrappers
   minhook/                  MinHook source
   dx11-hook/                DX11/DX12 Present hook source + CMakeLists.txt
-  hexa-native/              Hexa.NET prebuilt DLLs (cimguizmo, cimnodes, cimplot, cimplot3d)
   prebuilt-libs/            Prebuilt cimgui.dll (monolithic)
+    hexa/                   Hexa.NET 2.2.11-pre managed bindings (built from source)
 ```
 
 All third-party source is vendored directly -- no submodules.
@@ -52,13 +53,13 @@ msbuild DragonEngine.sln /p:Configuration="YLAD Release" /p:Platform=x64
 The prebuilt `cimgui.dll` is committed to `deps/prebuilt-libs/` -- no build step required for normal use.
 
 `cimgui.dll` is a monolithic DLL containing:
-- imgui 1.92.6-docking core + DX11/DX12/Win32 backends
+- imgui 1.92.4-docking core + DX11/DX12/Win32 backends
 - cimgui C wrappers (with `CIMGUI_VARGS0`)
-- ImGuizmo, implot, imnodes
+- ImGuizmo, implot, imnodes (PascalCase exports: `ImNodes_*`)
 - MinHook
 - DX11/DX12 Present hook
 
-Compatible with [Hexa.NET.ImGui](https://github.com/HexaEngine/Hexa.NET.ImGui) managed bindings (and Hexa.NET.ImGuizmo, Hexa.NET.ImPlot, Hexa.NET.ImNodes). All addon symbols are exported from the single DLL.
+Compatible with [Hexa.NET.ImGui](https://github.com/HexaEngine/Hexa.NET.ImGui) 2.2.11-pre managed bindings (and Hexa.NET.ImGuizmo, Hexa.NET.ImPlot, Hexa.NET.ImNodes, Hexa.NET.ImPlot3D). Prebuilt managed DLLs in `deps/prebuilt-libs/hexa/`. All addon symbols are exported from the single DLL, except implot3d which ships as a separate `cimplot3d.dll`.
 
 This single DLL is the only native dependency. Deploy it alongside `DELibrary.NET.exe`.
 
