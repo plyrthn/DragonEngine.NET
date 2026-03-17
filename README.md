@@ -55,11 +55,11 @@ The prebuilt `cimgui.dll` is committed to `deps/prebuilt-libs/` -- no build step
 `cimgui.dll` is a monolithic DLL containing:
 - imgui 1.92.4-docking core + DX11/DX12/Win32 backends
 - cimgui C wrappers (with `CIMGUI_VARGS0`)
-- ImGuizmo, implot, imnodes (PascalCase exports: `ImNodes_*`)
+- ImGuizmo, implot, imnodes (PascalCase exports: `ImNodes_*`), implot3d
 - MinHook
 - DX11/DX12 Present hook
 
-Compatible with [Hexa.NET.ImGui](https://github.com/HexaEngine/Hexa.NET.ImGui) 2.2.11-pre managed bindings (and Hexa.NET.ImGuizmo, Hexa.NET.ImPlot, Hexa.NET.ImNodes, Hexa.NET.ImPlot3D). Prebuilt managed DLLs in `deps/prebuilt-libs/hexa/`. All addon symbols are exported from the single DLL, except implot3d which ships as a separate `cimplot3d.dll`.
+Compatible with [Hexa.NET.ImGui](https://github.com/HexaEngine/Hexa.NET.ImGui) 2.2.11-pre managed bindings (and Hexa.NET.ImGuizmo, Hexa.NET.ImPlot, Hexa.NET.ImNodes, Hexa.NET.ImPlot3D). Prebuilt managed DLLs in `deps/prebuilt-libs/hexa/`. All addon symbols (including implot3d) are exported from the single monolithic DLL.
 
 This single DLL is the only native dependency. Deploy it alongside `DELibrary.NET.exe`.
 
@@ -91,29 +91,58 @@ Hook-specific exports (not part of upstream cimgui):
 | `AddFontFromMemoryTTF` | Add a font from memory to the atlas |
 | `igSetWindowFontScale` | SetWindowFontScale (not emitted by cimgui's generator) |
 
-## ImGui / ImGuizmo Usage
+## ImGui Usage
 
-`ImGui.Init()` loads `cimgui.dll` and installs the Present hook. All ImGui draw calls P/Invoke into the same DLL.
+`ImGui.Init()` loads `cimgui.dll` and installs the Present hook. Works on both DX11 and DX12 games.
 
 ```csharp
 using DragonEngineLibrary.Advanced;
+using Hexa.NET.ImGui;
+using Hexa.NET.ImPlot;
+using Hexa.NET.ImNodes;
+using Hexa.NET.ImGuizmo;
+using Hexa.NET.ImPlot3D;
 
+// 1. Init ImGui + hook
 ImGui.Init();
+
+// 2. Font loading (optional) - register AFTER Init
+ImGui.RegisterPreFirstFrame(() => {
+    // atlas is unlocked here, add fonts
+    DXHook.AddFontFromMemoryTTF(fontPtr, fontSize, 16f, IntPtr.Zero, IntPtr.Zero);
+});
+
+// 3. Init addon bindings - all resolve to the monolithic cimgui.dll
+var ctx = new HexaGen.Runtime.NativeLibraryContext("cimgui");
+ImPlot.InitApi(ctx);    ImPlot.CreateContext();
+ImNodes.InitApi(ctx);   ImNodes.CreateContext();
+ImGuizmo.InitApi(ctx);
+ImPlot3D.InitApi(ctx);  ImPlot3D.CreateContext();
+
+// 4. Register draw callback
 ImGui.RegisterUIUpdate(() =>
 {
-    // your ImGui drawing code here
+    // your ImGui/ImPlot/ImNodes/ImGuizmo/ImPlot3D drawing code here
 });
 ```
 
-`ImGuizmo::BeginFrame()` is called automatically each frame. Bindings are in their own namespace:
+### DX12 Games (Lost Judgment, etc.)
+
+DX12 games require a threaded callback dispatch to prevent CLR crashes. See [ImGui Integration](docs/imgui.md) in the wiki for the DX12 signal/wait pattern and `OnModInit` thread isolation.
+
+### Assembly Version Redirect
+
+Mod DLLs have no `app.config` binding redirects. Register an `AssemblyResolve` handler in `OnModInit` before any Hexa.NET types are touched:
 
 ```csharp
-using DragonEngineLibrary.ImGuizmoNET;
-
-ImGuizmo.SetOrthographic(false);
-ImGuizmo.SetDrawlist(foregroundDrawListPtr);
-ImGuizmo.SetRect(0, 0, width, height);
-ImGuizmo.Manipulate(ref view.M11, ref projection.M11, OPERATION.TRANSLATE, MODE.WORLD, ref model.M11);
+AppDomain.CurrentDomain.AssemblyResolve += (sender, args) => {
+    var name = new AssemblyName(args.Name);
+    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        if (asm.GetName().Name == name.Name) return asm;
+    string path = Path.Combine(modDir, name.Name + ".dll");
+    if (File.Exists(path)) try { return Assembly.LoadFrom(path); } catch { }
+    return null;
+};
 ```
 
 ## CI
