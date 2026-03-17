@@ -76,13 +76,9 @@ namespace DragonEngineLibrary.Advanced
                 VerifyModules(h);
             }
 
-#if !IW_AND_UP
             DragonEngine.Log("[ImGui] Calling DXHook.Init()");
             DXHook.Init();
             DragonEngine.Log("[ImGui] DXHook.Init() returned");
-#else
-            DragonEngine.Log("[ImGui] Skipping DXHook.Init() (IW_AND_UP)");
-#endif
         }
 
         // Check that each compiled-in module exported at least one known symbol
