@@ -121,6 +121,9 @@ namespace DragonEngineLibrary
         [DllImport("Y7Internal.dll", EntryPoint = "LIB_ECBATTLESTATUS_CHANGE_ARTS_TABLE_ENEMY", CallingConvention = CallingConvention.Cdecl)]
         internal static extern void DELibrary_ECBattleStatus_ChangeArtsTableEnemy(IntPtr battlestatus, uint id);
 
+        [DllImport("Y7Internal.dll", EntryPoint = "LIB_ECBATTLESTATUS_SET_LOCK_DEAD_SEQUENCE", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void DELibrary_ECBattleStatus_SetLockDeadSequence(IntPtr battlestatus, int mode, long hp);
+
         public long HPLimit
         {
             get
@@ -352,6 +355,12 @@ namespace DragonEngineLibrary
         public void AddExEffect(IntPtr data, bool dontShowMsg, bool preExec)
         {
             DELibrary_ECBattleStatus_AddExEffect(Pointer, data, dontShowMsg, preExec);
+        }
+
+
+        public void SetLockDeadSequence(int mode, long hp)
+        {
+            DELibrary_ECBattleStatus_SetLockDeadSequence(Pointer, mode, hp);
         }
 #endif
 
