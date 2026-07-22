@@ -1,15 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	<TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <OutputType>Library</OutputType>
     <TargetExt>.dll</TargetExt>
     <RootNamespace>DragonEngineLibrary</RootNamespace>
     <AssemblyName>DELibrary.NET</AssemblyName>
-    <LangVersion>7.3</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Deterministic>true</Deterministic>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- Library output types don't get a runtimeconfig.json by default, but DELibInitializer
+         hosts this assembly directly via hostfxr and needs one to resolve the runtime. -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <!-- Without Costura, transitive NuGet deps (HexaGen.Runtime) only get recorded in
+         deps.json pointing at the NuGet cache path, which won't exist on a player's
+         machine. Force them to be copied next to the dll instead. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -74,12 +80,9 @@
     <PlatformTarget>x64</PlatformTarget>
     <DefineConstants>TRACE;DEBUG;IW;K2_AND_UP;JE_AND_UP;YLAD_AND_UP;GAIDEN_AND_UP;IW_AND_UP;TURN_BASED_GAME</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <RegisterForComInterop>true</RegisterForComInterop>
     <DebugType>full</DebugType>
     <PlatformTarget>x64</PlatformTarget>
-    <LangVersion>7.3</LangVersion>
     <ErrorReport>prompt</ErrorReport>
-    <Prefer32Bit>true</Prefer32Bit>
     <WarningLevel>5</WarningLevel>
     <OutputPath>bin\x64\Infinite Wealth Debug\</OutputPath>
   </PropertyGroup>
@@ -169,12 +172,6 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
 
-
-  <ItemGroup>
-    <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
-    <PackageReference Include="Fody" Version="6.9.3" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" />
-  </ItemGroup>
 
 
   <ItemGroup>

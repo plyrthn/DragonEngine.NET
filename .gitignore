@@ -352,6 +352,7 @@ MigrationBackup/
 # CMake build output
 /build/
 deps/dxhook/build/
+DELibInitializer/build/
 
 # Linker artifacts
 deps/prebuilt-libs/*.lib

@@ -17,11 +17,20 @@ namespace DragonEngineLibrary.Advanced
         [DllImport("cimgui.dll", EntryPoint = "Register_Present_Function", CallingConvention = CallingConvention.Cdecl)]
         internal static extern void DELibrary_DXHook_RegisterPresentFunc(IntPtr addr);
 
+        [DllImport("cimgui.dll", EntryPoint = "Unregister_Present_Function", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void DELibrary_DXHook_UnregisterPresentFunc(IntPtr addr);
+
         [DllImport("cimgui.dll", EntryPoint = "Register_PreFirstFrame_Function", CallingConvention = CallingConvention.Cdecl)]
         internal static extern void DELibrary_DXHook_RegisterPreFirstFrameFunc(IntPtr addr);
 
+        [DllImport("cimgui.dll", EntryPoint = "Unregister_PreFirstFrame_Function", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void DELibrary_DXHook_UnregisterPreFirstFrameFunc(IntPtr addr);
+
         [DllImport("cimgui.dll", EntryPoint = "Register_WndProc_Function", CallingConvention = CallingConvention.Cdecl)]
         internal static extern void DELibrary_DXHook_RegisterWndProcFunc(IntPtr addr);
+
+        [DllImport("cimgui.dll", EntryPoint = "Unregister_WndProc_Function", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void DELibrary_DXHook_UnregisterWndProcFunc(IntPtr addr);
 
         [DllImport("cimgui.dll", EntryPoint = "GetGameHwnd", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr GetGameHwnd();

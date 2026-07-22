@@ -13,11 +13,26 @@ namespace DragonEngineLibrary.Advanced
     {
         internal delegate void DX11Present();
         private static List<DX11Present> _dx11Delegates = new List<DX11Present>();
+        private static Dictionary<Action, DX11Present> _uiUpdateDelegates = new Dictionary<Action, DX11Present>();
+        private static Dictionary<Action, DX11Present> _preFirstFrameDelegates = new Dictionary<Action, DX11Present>();
 
         public static bool toInit = false;
 
+        // Whether Init() has run. Registering a callback before the DX hook is
+        // installed just appends to a native array that nothing drains, so it
+        // renders nothing with no error. The Register* methods below lazily
+        // ensure Init() has run once so mods don't have to remember to call it.
+        private static bool _initialized = false;
+
+        private static void EnsureInitialized()
+        {
+            if (!_initialized)
+                Init();
+        }
+
         public static void RegisterUIUpdate(Action func)
         {
+            EnsureInitialized();
             DragonEngine.Log($"[ImGui] RegisterUIUpdate: {func.Method.Name}", Logger.Event.DEBUG);
             // Wrap in try/catch so exceptions don't propagate into native SEH
             // (which swallows them with no diagnostic info on DX12)
@@ -25,6 +40,7 @@ namespace DragonEngineLibrary.Advanced
             Action safeFunc = CreateSafeCallback(func, funcName);
             DX11Present del = new DX11Present(safeFunc);
             _dx11Delegates.Add(del);
+            _uiUpdateDelegates[func] = del;
             // JIT-compile the target on this thread so type initializers don't run
             // on the DX11 render thread when the native callback fires.
             try { System.Runtime.CompilerServices.RuntimeHelpers.PrepareDelegate(del); } catch { }
@@ -34,14 +50,29 @@ namespace DragonEngineLibrary.Advanced
         }
 
         /// <summary>
+        /// Unregister a callback previously passed to RegisterUIUpdate.
+        /// </summary>
+        public static void UnregisterUIUpdate(Action func)
+        {
+            if (!_uiUpdateDelegates.TryGetValue(func, out DX11Present del)) return;
+
+            DXHook.DELibrary_DXHook_UnregisterPresentFunc(Marshal.GetFunctionPointerForDelegate(del));
+            _uiUpdateDelegates.Remove(func);
+            _dx11Delegates.Remove(del);
+            DragonEngine.Log($"[ImGui] UnregisterUIUpdate: {func.Method.Name}", Logger.Event.DEBUG);
+        }
+
+        /// <summary>
         /// Register a callback that fires after ImGui context creation but before the first NewFrame.
         /// Font atlas is unlocked at this point - add custom fonts here.
         /// </summary>
         public static void RegisterPreFirstFrame(Action func)
         {
+            EnsureInitialized();
             DragonEngine.Log($"[ImGui] RegisterPreFirstFrame: {func.Method.Name}", Logger.Event.DEBUG);
             DX11Present del = new DX11Present(func);
             _dx11Delegates.Add(del);
+            _preFirstFrameDelegates[func] = del;
             // Same JIT pre-warm for pre-first-frame callbacks.
             try { System.Runtime.CompilerServices.RuntimeHelpers.PrepareDelegate(del); } catch { }
 
@@ -49,8 +80,22 @@ namespace DragonEngineLibrary.Advanced
             DragonEngine.Log("[ImGui] RegisterPreFirstFrame done", Logger.Event.DEBUG);
         }
 
+        /// <summary>
+        /// Unregister a callback previously passed to RegisterPreFirstFrame.
+        /// </summary>
+        public static void UnregisterPreFirstFrame(Action func)
+        {
+            if (!_preFirstFrameDelegates.TryGetValue(func, out DX11Present del)) return;
+
+            DXHook.DELibrary_DXHook_UnregisterPreFirstFrameFunc(Marshal.GetFunctionPointerForDelegate(del));
+            _preFirstFrameDelegates.Remove(func);
+            _dx11Delegates.Remove(del);
+            DragonEngine.Log($"[ImGui] UnregisterPreFirstFrame: {func.Method.Name}", Logger.Event.DEBUG);
+        }
+
         internal delegate void WndProcDelegate(IntPtr hwnd, int msg, IntPtr wparam, IntPtr lparam);
         private static List<WndProcDelegate> _wndProcDelegates = new List<WndProcDelegate>();
+        private static Dictionary<Action<IntPtr, int, IntPtr, IntPtr>, WndProcDelegate> _wndProcMap = new Dictionary<Action<IntPtr, int, IntPtr, IntPtr>, WndProcDelegate>();
 
         /// <summary>
         /// Register a WndProc callback through cimgui's window subclass.
@@ -59,14 +104,35 @@ namespace DragonEngineLibrary.Advanced
         /// </summary>
         public static void RegisterWndProc(Action<IntPtr, int, IntPtr, IntPtr> func)
         {
+            EnsureInitialized();
             WndProcDelegate del = new WndProcDelegate(func);
             _wndProcDelegates.Add(del);
+            _wndProcMap[func] = del;
 
             DXHook.DELibrary_DXHook_RegisterWndProcFunc(Marshal.GetFunctionPointerForDelegate(del));
         }
 
+        /// <summary>
+        /// Unregister a callback previously passed to RegisterWndProc.
+        /// </summary>
+        public static void UnregisterWndProc(Action<IntPtr, int, IntPtr, IntPtr> func)
+        {
+            if (!_wndProcMap.TryGetValue(func, out WndProcDelegate del)) return;
+
+            DXHook.DELibrary_DXHook_UnregisterWndProcFunc(Marshal.GetFunctionPointerForDelegate(del));
+            _wndProcMap.Remove(func);
+            _wndProcDelegates.Remove(del);
+        }
+
         public static void Init()
         {
+            // Idempotent: mods may call this explicitly and the Register* methods
+            // also call it lazily. Loading cimgui twice / re-running MH_CreateHook
+            // would fail, so only the first call does the work.
+            if (_initialized)
+                return;
+            _initialized = true;
+
             DragonEngine.Log("[ImGui] Init() called", Logger.Event.DEBUG);
             string libPath = Path.Combine(Entry.Root, "Y7Internal.dll");
             string cimguiPath = Path.Combine(new FileInfo(libPath).Directory.FullName, "cimgui.dll");
