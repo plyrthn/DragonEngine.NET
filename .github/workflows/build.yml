@@ -42,7 +42,7 @@ jobs:
           cd DELibInitializer
           mkdir -p build/x64
           cd build/x64
-          cmake -G "Visual Studio 17 2022" -DCMAKE_GENERATOR_PLATFORM=x64 ../..
+          cmake -DCMAKE_GENERATOR_PLATFORM=x64 ../..
 
       - name: Build DELibInitializer.asi
         run: cmake --build DELibInitializer/build/x64 --config Release
@@ -50,9 +50,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: delibinit
-          path: |
-            DELibInitializer/build/x64/Release/DELibInitializer.asi
-            DELibInitializer/build/x64/Release/nethost.dll
+          path: DELibInitializer/build/x64/Release/DELibInitializer.asi
 
   build-delib:
     runs-on: windows-latest

@@ -10,17 +10,31 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # (there can be several SDK feature bands installed side by side) and pick
 # the newest 10.x version present rather than hardcoding an exact patch.
 if(NOT DEFINED DOTNET_HOST_PACK_DIR)
-    if(NOT DEFINED ENV{ProgramFiles})
-        message(FATAL_ERROR "ProgramFiles environment variable is not set")
+    # The apphost pack can live under a few roots depending on how .NET was
+    # installed: the default Program Files location locally, or wherever
+    # DOTNET_ROOT points (that's where actions/setup-dotnet drops it on CI).
+    set(DOTNET_PACK_ROOTS "")
+    if(DEFINED ENV{DOTNET_ROOT})
+        list(APPEND DOTNET_PACK_ROOTS "$ENV{DOTNET_ROOT}")
+    endif()
+    if(DEFINED ENV{ProgramFiles})
+        list(APPEND DOTNET_PACK_ROOTS "$ENV{ProgramFiles}/dotnet")
     endif()
 
-    file(GLOB DOTNET_HOST_PACK_CANDIDATES
-        "$ENV{ProgramFiles}/dotnet/packs/Microsoft.NETCore.App.Host.win-x64/10.*"
-    )
+    if(NOT DOTNET_PACK_ROOTS)
+        message(FATAL_ERROR "Neither DOTNET_ROOT nor ProgramFiles is set, cannot locate the .NET host pack")
+    endif()
+
+    set(DOTNET_HOST_PACK_CANDIDATES "")
+    foreach(root ${DOTNET_PACK_ROOTS})
+        file(GLOB _candidates
+            "${root}/packs/Microsoft.NETCore.App.Host.win-x64/10.*")
+        list(APPEND DOTNET_HOST_PACK_CANDIDATES ${_candidates})
+    endforeach()
 
     if(NOT DOTNET_HOST_PACK_CANDIDATES)
         message(FATAL_ERROR "Could not find a .NET 10 Microsoft.NETCore.App.Host.win-x64 pack "
-                             "under $ENV{ProgramFiles}/dotnet/packs. Install the .NET 10 SDK.")
+                             "under any of: ${DOTNET_PACK_ROOTS}. Install the .NET 10 SDK.")
     endif()
 
     list(SORT DOTNET_HOST_PACK_CANDIDATES COMPARE NATURAL)
