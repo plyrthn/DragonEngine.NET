@@ -949,6 +949,20 @@ __declspec(dllexport) void Register_Present_Function(void* callback)
         g_PresentCallbacks[g_PresentCallbackCount++] = (ManagedCallback)callback;
 }
 
+__declspec(dllexport) void Unregister_Present_Function(void* callback)
+{
+    for (int i = 0; i < g_PresentCallbackCount; i++)
+    {
+        if (g_PresentCallbacks[i] != (ManagedCallback)callback) continue;
+        HookLog("[DXHook] Unregister_Present_Function(%p) count=%d->%d\n",
+            callback, g_PresentCallbackCount, g_PresentCallbackCount - 1);
+        for (int j = i; j < g_PresentCallbackCount - 1; j++)
+            g_PresentCallbacks[j] = g_PresentCallbacks[j + 1];
+        g_PresentCallbacks[--g_PresentCallbackCount] = nullptr;
+        break;
+    }
+}
+
 __declspec(dllexport) void Register_PreFirstFrame_Function(void* callback)
 {
     HookLog("[DXHook] Register_PreFirstFrame_Function(%p) count=%d->%d\n",
@@ -957,10 +971,36 @@ __declspec(dllexport) void Register_PreFirstFrame_Function(void* callback)
         g_PreFirstFrameCallbacks[g_PreFirstFrameCallbackCount++] = (ManagedCallback)callback;
 }
 
+__declspec(dllexport) void Unregister_PreFirstFrame_Function(void* callback)
+{
+    for (int i = 0; i < g_PreFirstFrameCallbackCount; i++)
+    {
+        if (g_PreFirstFrameCallbacks[i] != (ManagedCallback)callback) continue;
+        HookLog("[DXHook] Unregister_PreFirstFrame_Function(%p) count=%d->%d\n",
+            callback, g_PreFirstFrameCallbackCount, g_PreFirstFrameCallbackCount - 1);
+        for (int j = i; j < g_PreFirstFrameCallbackCount - 1; j++)
+            g_PreFirstFrameCallbacks[j] = g_PreFirstFrameCallbacks[j + 1];
+        g_PreFirstFrameCallbacks[--g_PreFirstFrameCallbackCount] = nullptr;
+        break;
+    }
+}
+
 __declspec(dllexport) void Register_WndProc_Function(void* callback)
 {
     if (g_WndProcCallbackCount < MAX_WNDPROC_CALLBACKS)
         g_WndProcCallbacks[g_WndProcCallbackCount++] = (WndProcCallback)callback;
+}
+
+__declspec(dllexport) void Unregister_WndProc_Function(void* callback)
+{
+    for (int i = 0; i < g_WndProcCallbackCount; i++)
+    {
+        if (g_WndProcCallbacks[i] != (WndProcCallback)callback) continue;
+        for (int j = i; j < g_WndProcCallbackCount - 1; j++)
+            g_WndProcCallbacks[j] = g_WndProcCallbacks[j + 1];
+        g_WndProcCallbacks[--g_WndProcCallbackCount] = nullptr;
+        break;
+    }
 }
 
 __declspec(dllexport) int CheckImGuiContext()
