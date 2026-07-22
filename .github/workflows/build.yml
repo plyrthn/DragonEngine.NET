@@ -9,7 +9,7 @@ jobs:
   build-cimgui:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure CMake
         shell: bash
@@ -22,7 +22,7 @@ jobs:
       - name: Build cimgui.dll
         run: cmake --build deps/dxhook/build/x64 --config Release
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cimgui
           path: deps/dxhook/build/x64/Release/cimgui.dll
@@ -30,9 +30,9 @@ jobs:
   build-delibinit:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -47,7 +47,7 @@ jobs:
       - name: Build DELibInitializer.asi
         run: cmake --build DELibInitializer/build/x64 --config Release
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: delibinit
           path: DELibInitializer/build/x64/Release/DELibInitializer.asi
@@ -67,23 +67,23 @@ jobs:
           - config: "Gaiden Release"
             artifact: DELibrary.Gaiden
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
       - name: Build DELibrary.NET
         run: dotnet build DELibrary.NET/DELibrary.NET.csproj -c "${{ matrix.config }}" -p:Platform=x64
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: cimgui
           path: staging
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: delibinit
           path: staging
@@ -100,7 +100,7 @@ jobs:
           cp "${outdir}"/*.deps.json staging/ 2>/dev/null || true
           cp "${outdir}"/*.runtimeconfig.json staging/ 2>/dev/null || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: staging/*
@@ -112,7 +112,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
