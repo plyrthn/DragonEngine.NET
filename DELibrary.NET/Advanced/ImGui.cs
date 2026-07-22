@@ -18,8 +18,21 @@ namespace DragonEngineLibrary.Advanced
 
         public static bool toInit = false;
 
+        // Whether Init() has run. Registering a callback before the DX hook is
+        // installed just appends to a native array that nothing drains, so it
+        // renders nothing with no error. The Register* methods below lazily
+        // ensure Init() has run once so mods don't have to remember to call it.
+        private static bool _initialized = false;
+
+        private static void EnsureInitialized()
+        {
+            if (!_initialized)
+                Init();
+        }
+
         public static void RegisterUIUpdate(Action func)
         {
+            EnsureInitialized();
             DragonEngine.Log($"[ImGui] RegisterUIUpdate: {func.Method.Name}", Logger.Event.DEBUG);
             // Wrap in try/catch so exceptions don't propagate into native SEH
             // (which swallows them with no diagnostic info on DX12)
@@ -55,6 +68,7 @@ namespace DragonEngineLibrary.Advanced
         /// </summary>
         public static void RegisterPreFirstFrame(Action func)
         {
+            EnsureInitialized();
             DragonEngine.Log($"[ImGui] RegisterPreFirstFrame: {func.Method.Name}", Logger.Event.DEBUG);
             DX11Present del = new DX11Present(func);
             _dx11Delegates.Add(del);
@@ -90,6 +104,7 @@ namespace DragonEngineLibrary.Advanced
         /// </summary>
         public static void RegisterWndProc(Action<IntPtr, int, IntPtr, IntPtr> func)
         {
+            EnsureInitialized();
             WndProcDelegate del = new WndProcDelegate(func);
             _wndProcDelegates.Add(del);
             _wndProcMap[func] = del;
@@ -111,6 +126,13 @@ namespace DragonEngineLibrary.Advanced
 
         public static void Init()
         {
+            // Idempotent: mods may call this explicitly and the Register* methods
+            // also call it lazily. Loading cimgui twice / re-running MH_CreateHook
+            // would fail, so only the first call does the work.
+            if (_initialized)
+                return;
+            _initialized = true;
+
             DragonEngine.Log("[ImGui] Init() called", Logger.Event.DEBUG);
             string libPath = Path.Combine(Entry.Root, "Y7Internal.dll");
             string cimguiPath = Path.Combine(new FileInfo(libPath).Directory.FullName, "cimgui.dll");
