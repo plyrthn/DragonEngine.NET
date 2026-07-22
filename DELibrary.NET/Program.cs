@@ -12,7 +12,7 @@ using System.Diagnostics;
 
 namespace DragonEngineLibrary
 {
-    public class Library
+    public class Entry
     {
         [DllImport("kernel32")]
         static extern bool AllocConsole();
@@ -22,6 +22,8 @@ namespace DragonEngineLibrary
 
         public static string BaseDirectory;
         public static string Root;
+
+        private delegate void InitializeDelegate(IntPtr turnManager);
 
         //Do whatever you want here
         static void ThreadTest()
@@ -154,15 +156,16 @@ namespace DragonEngineLibrary
         }
 
         // This method will be called by native code inside the target process…
-        public static void Main(string[] args)
+        public static int Initialize(IntPtr gameDirectory)
         {
+            string directory = Marshal.PtrToStringUni(gameDirectory);
             //Initialize logging file
             //File.Create("dotnetlog.txt").Close();
             // DragonEngine._logStream = new MemoryStream();
             // DragonEngine._logWriter = new StreamWriter(DragonEngine._logStream);
 
-            BaseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            Root = args[0];
+            BaseDirectory = Environment.CurrentDirectory;
+            Root = directory;
 
             //Create seperate thread for our C# library
             DragonEngine.Log("DragonEngine Library .Net Main Start");
@@ -172,16 +175,18 @@ namespace DragonEngineLibrary
             if(!ShouldInitialize())
             {
                 DragonEngine.Log("There is no need to initialize the library. No compatible mods detected. Aborting.", Logger.Event.WARNING);
-                return;
+                return 0;
             }
 
             // Environment.CurrentDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mods", "DE Library");
             DragonEngine.Initialize();
 
-            Environment.CurrentDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory);
+            Environment.CurrentDirectory = BaseDirectory;
 
             Thread thread1 = new Thread(ThreadTest);
             thread1.Start();
+
+            return 0;
         }
     }
 }

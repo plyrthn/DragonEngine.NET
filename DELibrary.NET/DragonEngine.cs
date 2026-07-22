@@ -192,7 +192,7 @@ namespace DragonEngineLibrary
 
             Stopwatch initTime = Stopwatch.StartNew();
 
-            string libPath = Path.Combine(Library.Root, "Y7Internal.dll");
+            string libPath = Path.Combine(Entry.Root, "Y7Internal.dll");
             DragonEngine.Log($"Y7Internal path: {libPath}");
 
             DragonEngine.Log("Pre Y7Internal.dll import");
@@ -223,7 +223,7 @@ namespace DragonEngineLibrary
 
             DragonEngine.Log($"DELib load and init time: {initTime.Elapsed.TotalSeconds}");
 
-            Environment.CurrentDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory);
+            Environment.CurrentDirectory = Path.Combine(Entry.BaseDirectory);
 
 #if TURN_BASED_GAME
             BattleTurnManager.OverrideAttackerSelectionInfo.deleg = new BattleTurnManager.OverrideAttackerSelectionDelegate(BattleTurnManager.ReturnManualAttackerSelectionResult);

@@ -68,7 +68,7 @@ namespace DragonEngineLibrary.Advanced
         public static void Init()
         {
             DragonEngine.Log("[ImGui] Init() called", Logger.Event.DEBUG);
-            string libPath = Path.Combine(Library.Root, "Y7Internal.dll");
+            string libPath = Path.Combine(Entry.Root, "Y7Internal.dll");
             string cimguiPath = Path.Combine(new FileInfo(libPath).Directory.FullName, "cimgui.dll");
 
             DragonEngine.Log($"[ImGui] cimgui path: {cimguiPath} exists={File.Exists(cimguiPath)}", Logger.Event.DEBUG);
