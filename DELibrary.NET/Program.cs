@@ -22,8 +22,6 @@ namespace DragonEngineLibrary
         public static string BaseDirectory;
         public static string Root;
 
-        private delegate void InitializeDelegate(IntPtr turnManager);
-
         //Do whatever you want here
         static void ThreadTest()
         {
