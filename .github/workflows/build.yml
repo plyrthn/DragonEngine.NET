@@ -27,9 +27,36 @@ jobs:
           name: cimgui
           path: deps/dxhook/build/x64/Release/cimgui.dll
 
+  build-delibinit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          cd DELibInitializer
+          mkdir -p build/x64
+          cd build/x64
+          cmake -G "Visual Studio 17 2022" -DCMAKE_GENERATOR_PLATFORM=x64 ../..
+
+      - name: Build DELibInitializer.asi
+        run: cmake --build DELibInitializer/build/x64 --config Release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: delibinit
+          path: |
+            DELibInitializer/build/x64/Release/DELibInitializer.asi
+            DELibInitializer/build/x64/Release/nethost.dll
+
   build-delib:
     runs-on: windows-latest
-    needs: build-cimgui
+    needs: [build-cimgui, build-delibinit]
     strategy:
       matrix:
         include:
@@ -46,6 +73,10 @@ jobs:
         with:
           submodules: false
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Build DELibrary.NET
         run: dotnet build DELibrary.NET/DELibrary.NET.csproj -c "${{ matrix.config }}" -p:Platform=x64
 
@@ -54,15 +85,22 @@ jobs:
           name: cimgui
           path: staging
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: delibinit
+          path: staging
+
       - name: Stage release files
         shell: bash
         run: |
           cfg="${{ matrix.config }}"
           outdir="DELibrary.NET/bin/x64/${cfg}"
-          # DELibrary.NET outputs .dll directly (OutputType=WinExe + TargetExt=.dll)
-          cp "${outdir}/DELibrary.NET.dll" staging/
-          cp "${outdir}/Newtonsoft.Json.dll" staging/ 2>/dev/null || true
-          cp "${outdir}/MinHook.NET.dll" staging/ 2>/dev/null || true
+          # DELibrary.NET outputs .dll directly (OutputType=WinExe + TargetExt=.dll).
+          # Dependencies (ImGui/ImPlot/ImNodes/ImGuizmo/HexaGen.Runtime) are no longer
+          # merged in via Costura, so they need to ship alongside as separate files.
+          cp "${outdir}"/*.dll staging/
+          cp "${outdir}"/*.deps.json staging/ 2>/dev/null || true
+          cp "${outdir}"/*.runtimeconfig.json staging/ 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -96,3 +134,7 @@ jobs:
             --title "${{ github.ref_name }}" \
             --generate-notes \
             DELibrary.*.zip
+
+      - name: Remind to submit release for AV false-positive review
+        run: |
+          echo "::notice::New release ${{ github.ref_name }} is up. Since these DLLs hook and inject into a game process, some AVs may flag them. Consider submitting the zips to https://www.microsoft.com/en-us/wdsi/filesubmission (and other vendors via VirusTotal) for a false-positive review. This has to be done manually, there's no anonymous API for automated submission."
