@@ -64,8 +64,30 @@ namespace DragonEngineLibrary
             {
                 string assemblyName = args.Name.Split(',')[0];
 
-                if (assemblyName == "DELibrary.NET")
-                    return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(x => x.GetName().Name == "DELibrary.NET");
+                // Resolve against an already-loaded assembly by simple name. Covers
+                // DELibrary.NET and any binding a mod references that's already loaded,
+                // and ignores version differences (a mod built against a slightly
+                // different binding version than the one that ships).
+                var loaded = AppDomain.CurrentDomain.GetAssemblies()
+                    .FirstOrDefault(x => x.GetName().Name == assemblyName);
+                if (loaded != null)
+                    return loaded;
+
+                // Not loaded yet: the ImGui/ImPlot/ImNodes/ImGuizmo bindings and
+                // HexaGen.Runtime ship as separate files next to DELibrary.NET now
+                // that Costura no longer merges them in. A mod loaded from the mods
+                // folder doesn't probe that directory, so load it from Root (the DE
+                // Library folder where DELibrary.NET.dll and the bindings live).
+                try
+                {
+                    if (!string.IsNullOrEmpty(Root))
+                    {
+                        string candidate = Path.Combine(Root, assemblyName + ".dll");
+                        if (File.Exists(candidate))
+                            return System.Reflection.Assembly.LoadFrom(candidate);
+                    }
+                }
+                catch { }
 
                 return null;
             };
