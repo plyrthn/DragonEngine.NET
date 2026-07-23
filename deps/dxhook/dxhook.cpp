@@ -98,13 +98,20 @@ static FILE* g_LogFile = nullptr;
 static void OpenLogFile()
 {
     if (g_LogFile) return;
-    // resolve path relative to the exe, not cwd
-    char exePath[MAX_PATH] = {};
-    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
-    char* slash = strrchr(exePath, '\\');
+    // Write next to this DLL (the library folder where cimgui.dll lives), not the
+    // game exe. Resolve our own module from an address inside it rather than the
+    // exe (GetModuleFileNameA(nullptr, ...)).
+    char dllPath[MAX_PATH] = {};
+    HMODULE self = nullptr;
+    if (GetModuleHandleExA(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCSTR>(&OpenLogFile), &self)) {
+        GetModuleFileNameA(self, dllPath, MAX_PATH);
+    }
+    char* slash = strrchr(dllPath, '\\');
     if (slash) *(slash + 1) = '\0';
     char logPath[MAX_PATH];
-    snprintf(logPath, sizeof(logPath), "%scimgui_hook.log", exePath);
+    snprintf(logPath, sizeof(logPath), "%scimgui_hook.log", dllPath);
     g_LogFile = fopen(logPath, "w");
     if (!g_LogFile) {
         // fallback: cwd
